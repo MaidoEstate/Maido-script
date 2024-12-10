@@ -1,10 +1,13 @@
+# Base image
 FROM python:3.11-slim
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y wget gnupg unzip && \
+RUN apt-get update && \
+    apt-get install -y wget gnupg unzip jq && \
     wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
     echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && apt-get install -y google-chrome-stable && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable && \
     GOOGLE_CHROME_VERSION=$(google-chrome --version | awk '{print $3}') && \
     CHROME_DRIVER_VERSION=$(curl -s https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone-with-downloads.json | jq -r ".milestones[\"${GOOGLE_CHROME_VERSION%%.*}\"].downloads.chromedriver.linux64[0].version") && \
     wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${GOOGLE_CHROME_VERSION}/chromedriver-linux64.zip && \
@@ -14,7 +17,7 @@ RUN apt-get update && apt-get install -y wget gnupg unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set the working directory
 WORKDIR /app
 
 # Copy application files
@@ -23,5 +26,5 @@ COPY . /app
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the script
+# Set the entry point for the application
 CMD ["python3", "test1.py"]
