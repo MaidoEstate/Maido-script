@@ -1,6 +1,10 @@
 # Base image
 FROM python:3.11-slim
 
+# Set environment variables to minimize interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+
 # Install system dependencies
 RUN apt-get update -o Dir::Cache::pkgcache="" -o Dir::Cache::srcpkgcache="" && \
     apt-get install -y --no-install-recommends gnupg unzip curl && \
