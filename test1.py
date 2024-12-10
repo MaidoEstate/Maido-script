@@ -1,9 +1,9 @@
-import os
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import requests
+import os
 import time
 import re
 from datetime import datetime
@@ -21,21 +21,25 @@ def save_last_page(file_path, last_page):
     with open(file_path, 'w') as file:
         file.write(str(last_page))
 
-# Use environment variables for paths
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
-LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", os.path.join(os.getcwd(), 'last_page.txt'))
-
-# Set up Selenium WebDriver
+# Set up Selenium WebDriver using Render's pre-installed Chrome and ChromeDriver
 chrome_options = Options()
-chrome_options.add_argument("--headless")  # Optional: Run in headless mode
-chrome_options.add_argument("--no-sandbox")  # Required for running in some cloud environments
-chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resources in container
-service = Service(CHROMEDRIVER_PATH)
+chrome_options.add_argument("--headless")  # Run in headless mode
+chrome_options.add_argument("--no-sandbox")  # Required for some environments
+chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+
+chrome_binary_path = "/opt/render/project/chrome/chrome"  # Pre-installed Chrome binary path
+chromedriver_path = "/opt/render/project/chromedriver/chromedriver"  # Pre-installed ChromeDriver path
+chrome_options.binary_location = chrome_binary_path
+service = Service(chromedriver_path)
 
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
+# Get the path where the script is located
+script_directory = os.path.dirname(os.path.abspath(__file__))
+last_page_file = os.path.join(script_directory, 'last_page.txt')
+
 # Check if last_page.txt exists and get the starting page ID
-last_processed_page = read_last_page(LAST_PAGE_FILE)
+last_processed_page = read_last_page(last_page_file)
 if last_processed_page is not None:
     print(f"Resuming from page {last_processed_page + 1}")
     start_page = last_processed_page + 1  # Start from the next page
@@ -60,8 +64,8 @@ while True:
         print(f"URL redirected to homepage {driver.current_url}. Stopping.")
         break
 
-    # Create a unique folder for each page ID
-    page_folder = os.path.join(os.getcwd(), str(page))  # Ensure folder creation in the current working directory
+    # Create a unique folder for each page ID within the script's directory
+    page_folder = os.path.join(script_directory, str(page))
     if not os.path.exists(page_folder):
         os.makedirs(page_folder)
         print(f"Folder created: {page_folder}")
@@ -110,7 +114,7 @@ while True:
         print(f"Page ID {page} - No details found.")
 
     # Save the last processed page
-    save_last_page(LAST_PAGE_FILE, page)
+    save_last_page(last_page_file, page)
     print(f"Saved last page: {page}")
 
     # Increment page for the next iteration
