@@ -1,11 +1,11 @@
 # Base image
 FROM python:3.11-slim
 
-# Set environment variables to minimize interactive prompts
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 
-# Install system dependencies
+# Install system dependencies and Chrome
 RUN apt-get update -o Dir::Cache::pkgcache="" -o Dir::Cache::srcpkgcache="" && \
     apt-get install -y --no-install-recommends gnupg unzip curl && \
     curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
