@@ -24,7 +24,7 @@ def save_last_page(file_path, last_page):
 # Set up Selenium WebDriver
 chrome_options = Options()
 chrome_options.add_argument("--headless")  # Optional: Run in headless mode
-service = Service('/usr/local/bin/chromedriver')  # Using the same path as you had before
+service = Service('/usr/bin/chromedriver')  # Adjust for Render's install location 
 
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
