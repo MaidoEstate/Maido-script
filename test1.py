@@ -7,9 +7,8 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
+import logging
 import threading
-import socketserver
-import socket
 
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
@@ -17,8 +16,23 @@ BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
 START_PAGE = int(os.getenv("START_PAGE", "12440"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/scraped_data")  # Default to Docker's app folder
-PORT = int(os.getenv("PORT", 8080))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")  # Default to current directory
+
+# Logging setup
+LOG_DIR = os.path.join(OUTPUT_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    filename=os.path.join(LOG_DIR, "scraper.log"),
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s]: %(message)s",
+    filemode="a"
+)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
+console_handler.setFormatter(formatter)
+logging.getLogger().addHandler(console_handler)
 
 # Selenium setup
 chrome_options = Options()
@@ -31,18 +45,13 @@ driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Graceful exit
 def graceful_exit():
-    print("Shutting down scraper.")
+    logging.info("Shutting down scraper.")
     driver.quit()
 
 # Helper: Create directory if it doesn't exist
 def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
-
-# Helper: Log messages to a file
-def log_message(filename, message):
-    with open(filename, "a") as f:
-        f.write(f"{datetime.now()}: {message}\n")
 
 # Helper: Download image with retries
 def download_image(url, folder, image_counter):
@@ -53,23 +62,24 @@ def download_image(url, folder, image_counter):
             img_path = os.path.join(folder, img_name)
             with open(img_path, "wb") as f:
                 f.write(img_data)
+            logging.info(f"Downloaded image: {img_url} -> {img_path}")
             return img_path
         except Exception as e:
             if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
-                log_message("error.log", f"Failed to download image {url}: {e}")
+                logging.error(f"Failed to download image {url}: {e}")
     return None
 
 # Scraper: Process a single page
 def scrape_page(page_id, output_dir):
     url = f"{BASE_URL}{page_id}"
-    print(f"Accessing URL: {url}")
+    logging.info(f"Accessing URL: {url}")
     try:
         driver.get(url)
         time.sleep(2)
 
         # Check if redirected to homepage
         if driver.current_url == "https://www.designers-osaka-chintai.info/":
-            print(f"Page {page_id} redirected to homepage. Skipping.")
+            logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return None
 
         # Parse page content
@@ -99,12 +109,11 @@ def scrape_page(page_id, output_dir):
                 writer.writerow(["Page ID", "Title", "Description", "Images"])
             writer.writerow([page_id, title, description, ", ".join(images)])
 
-        print(f"Page {page_id} scraped successfully.")
-        log_message("success.log", f"Page {page_id} scraped successfully.")
+        logging.info(f"Page {page_id} scraped successfully.")
         return True
 
     except Exception as e:
-        log_message("error.log", f"Error scraping page {page_id}: {e}")
+        logging.error(f"Error scraping page {page_id}: {e}")
         return None
 
 # Main scraper loop
@@ -114,21 +123,21 @@ def main():
     create_directory(OUTPUT_DIR)
 
     while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
-        print(f"Scraping page {current_page}...")
+        logging.info(f"Scraping page {current_page}...")
         result = scrape_page(current_page, OUTPUT_DIR)
         if result:
             consecutive_invalid = 0  # Reset on success
         else:
             consecutive_invalid += 1  # Increment on failure
-            print(f"Consecutive invalid pages: {consecutive_invalid}")
+            logging.warning(f"Consecutive invalid pages: {consecutive_invalid}")
         current_page += 1
 
-    print("Scraping complete. Exiting.")
+    logging.info("Scraping complete. Exiting.")
     graceful_exit()
 
 # Start the scraper
 if __name__ == "__main__":
     try:
-        threading.Thread(target=main, daemon=False).start()
+        main()
     except KeyboardInterrupt:
         graceful_exit()
