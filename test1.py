@@ -1,4 +1,5 @@
 import os
+import socket
 import time
 import re
 import requests
@@ -8,158 +9,80 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
-
+import signal
+import sys
 import http.server
 import socketserver
 import threading
 
-# Start a simple HTTP server
+# Environment variables
+CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
+LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
+
+# Setup Chrome options
+chrome_options = Options()
+chrome_options.binary_location = "/usr/bin/chromium"
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+
+service = Service(CHROMIUM_DRIVER_PATH)
+driver = webdriver.Chrome(service=service, options=chrome_options)
+
+# Graceful shutdown handler
+def graceful_exit(*args):
+    print("Shutting down scraper.")
+    driver.quit()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, graceful_exit)
+signal.signal(signal.SIGTERM, graceful_exit)
+
+# Run dummy server
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
 def run_server():
     port = int(os.getenv("PORT", 8080))
+    if is_port_in_use(port):
+        print(f"Port {port} is already in use. Skipping server start.")
+        return
     handler = http.server.SimpleHTTPRequestHandler
     with socketserver.TCPServer(("", port), handler) as httpd:
         print(f"Serving on port {port}")
         httpd.serve_forever()
 
-# Run the HTTP server in a separate thread
 threading.Thread(target=run_server, daemon=True).start()
 
-
-# Environment variables for Chromium driver and the last processed page file
-CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
-LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
-
-# Function to read the last processed page
-def read_last_page(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as file:
-            return int(file.read().strip())
-    return None
-
-# Function to save the last processed page
-def save_last_page(file_path, last_page):
-    with open(file_path, 'w') as file:
-        file.write(str(last_page))
-
-# Set up Chromium options
-chrome_options = Options()
-chrome_options.binary_location = "/usr/bin/chromium"  # Adjust to the correct Chromium binary path
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-
-# Initialize the WebDriver
-service = Service(CHROMIUM_DRIVER_PATH)
-driver = webdriver.Chrome(service=service, options=chrome_options)
-
-# Get the path where the script is located
-script_directory = os.path.dirname(os.path.abspath(__file__))
-
-# Check if last_page.txt exists and get the starting page ID
-last_processed_page = read_last_page(LAST_PAGE_FILE)
-if last_processed_page is not None:
-    print(f"Resuming from page {last_processed_page + 1}")
-    start_page = last_processed_page + 1  # Start from the next page
-else:
-    start_page = int(input("Enter the starting page ID: "))  # Fallback to manual input
-
-# Initialize scraping logic
-page = start_page
-image_counter = 1  # Initialize image counter
+# Scraper logic
+last_processed_page = int(os.getenv("START_PAGE", "12440"))
 base_url = "https://www.designers-osaka-chintai.info/detail/id/"
-max_pages_to_scrape = 10  # Set a limit to prevent infinite scraping
-retry_limit = 3  # Maximum retries for a page
+redirect_limit = 3
+redirect_count = 0
 
 while True:
-    if page > start_page + max_pages_to_scrape - 1:
-        print("Reached the maximum number of pages to scrape.")
+    url = f"{base_url}{last_processed_page}"
+    print(f"Accessing URL: {url}")
+    try:
+        driver.get(url)
+        time.sleep(3)
+
+        if driver.current_url == "https://www.designers-osaka-chintai.info/":
+            print("Redirect detected.")
+            redirect_count += 1
+            if redirect_count >= redirect_limit:
+                print("Too many redirects. Exiting.")
+                break
+            continue
+        redirect_count = 0
+
+        # Add scraping logic here...
+
+        last_processed_page += 1
+
+    except Exception as e:
+        print(f"Error: {e}")
         break
 
-    url = f"{base_url}{page}"
-    print(f"Accessing URL: {url}")
-
-    retries = 0
-    while retries < retry_limit:
-        try:
-            driver.get(url)
-            time.sleep(3)
-
-            # Check if redirected to homepage
-            if driver.current_url == "https://www.designers-osaka-chintai.info/":
-                print(f"URL redirected to homepage {driver.current_url}. Stopping.")
-                save_last_page(LAST_PAGE_FILE, page - 1)
-                driver.quit()
-                exit(0)  # Graceful exit
-
-            # Create a unique folder for each page ID within the script's directory
-            page_folder = os.path.join(script_directory, str(page))
-            os.makedirs(page_folder, exist_ok=True)
-            print(f"Folder created: {page_folder}")
-
-            # CSV File setup within the page folder
-            csv_filename = os.path.join(page_folder, "property_details.csv")
-            with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
-                csv_writer = csv.writer(csvfile)
-                csv_writer.writerow([
-                    "Page ID", "Title", "Rental Details", "Google Maps URL", "Property Description"
-                ])
-
-            # Use BeautifulSoup to parse the page source
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-
-            # Extract property details
-            property_detail = soup.find('div', class_='main clearFix')
-            if property_detail:
-                title = property_detail.find('h1').text.strip() if property_detail.find('h1') else 'No title'
-                print(f"Page ID {page} - Title: {title}")
-
-                # Extract all images
-                images = soup.find_all('img')
-                image_urls = [img['src'] for img in images if 'src' in img.attrs]
-                for img_url in image_urls:
-                    if img_url.startswith('http'):
-                        img_name = os.path.basename(img_url)
-                        if re.match(r'^\d', img_name):
-                            current_date = datetime.now().strftime("%Y%m%d")
-                            new_img_name = f"Maido{current_date}_{image_counter}.jpg"
-                            img_path = os.path.join(page_folder, new_img_name)
-                            try:
-                                img_data = requests.get(img_url, timeout=10).content
-                                with open(img_path, 'wb') as handler:
-                                    handler.write(img_data)
-                                print(f"Downloaded image: {img_url} as {new_img_name}")
-                                image_counter += 1
-                            except requests.RequestException as e:
-                                print(f"Failed to download image {img_url}: {e}")
-
-                # Save data to CSV
-                rental_details = "Example rental details"  # Replace with your actual extraction logic
-                with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
-                    csv_writer = csv.writer(csvfile)
-                    csv_writer.writerow([page, title, rental_details, "Google Maps URL", "Property Description"])
-
-            else:
-                print(f"Page ID {page} - No details found.")
-
-            # Save the last processed page
-            save_last_page(LAST_PAGE_FILE, page)
-            print(f"Saved last page: {page}")
-
-            # Increment page for the next iteration
-            page += 1
-
-            # Add a delay of 2 seconds between requests to avoid overwhelming the server
-            time.sleep(2)
-            break  # Break out of the retry loop on success
-
-        except Exception as e:
-            retries += 1
-            print(f"Error accessing page {page}: {e}. Retrying ({retries}/{retry_limit})...")
-            if retries == retry_limit:
-                print(f"Skipping page {page} after {retry_limit} failed attempts.")
-                page += 1  # Move to the next page even after retries
-
-# Quit the WebDriver
 driver.quit()
-
-print(f"Scraping completed. Last processed page: {page - 1}")
