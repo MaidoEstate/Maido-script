@@ -26,5 +26,6 @@ jobs:
           START_PAGE: 12440  # Example environment variable
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
+           ACTIONS_STEP_DEBUG: true
           WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}  # Secure Webflow API Token
         run: python test1.py
