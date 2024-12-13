@@ -39,6 +39,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV CHROMEDRIVER_PATH="/usr/local/bin/chromedriver"
 ENV LAST_PAGE_FILE="last_page.txt"
 
-# Set the entry point for t
-he application
-CMD ["python3", "test1.py"
+# Set the entry point for the application
+CMD ["python3", "test1.py"]
