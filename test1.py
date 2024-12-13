@@ -27,7 +27,7 @@ def save_last_page(file_path, last_page):
 
 # Set up Chromium options
 chrome_options = Options()
-chrome_options.binary_location = "/usr/bin/chromium-browser"  # Path to the Chromium binary
+chrome_options.binary_location = "/usr/bin/chromium"  # Adjust to the correct Chromium binary path
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
@@ -71,7 +71,9 @@ while True:
             # Check if redirected to homepage
             if driver.current_url == "https://www.designers-osaka-chintai.info/":
                 print(f"URL redirected to homepage {driver.current_url}. Stopping.")
-                raise Exception("Redirection detected")
+                save_last_page(LAST_PAGE_FILE, page - 1)
+                driver.quit()
+                exit(0)  # Graceful exit
 
             # Create a unique folder for each page ID within the script's directory
             page_folder = os.path.join(script_directory, str(page))
