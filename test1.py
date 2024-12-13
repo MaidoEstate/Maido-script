@@ -41,7 +41,7 @@ def create_directory(path):
         os.makedirs(path)
 
 # Helper: Download image with retries
-def download_image(img_url, folder, image_counter):
+def download_image(img_url, folder, image_counter, page_id):
     for attempt in range(MAX_RETRIES):
         try:
             img_data = requests.get(img_url, timeout=10).content
@@ -49,11 +49,11 @@ def download_image(img_url, folder, image_counter):
             img_path = os.path.join(folder, img_name)
             with open(img_path, "wb") as f:
                 f.write(img_data)
-            logging.info(f"Downloaded image: {img_url} -> {img_path}")
+            logging.info(f"Downloaded image from page {page_id}: {img_url} -> {img_path}")
             return img_path
         except Exception as e:
             if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
-                logging.error(f"Failed to download image {img_url}: {e}")
+                logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
     return None
 
 # Scraper: Process a single page
@@ -84,7 +84,7 @@ def scrape_page(page_id, output_dir):
         for i, img_tag in enumerate(image_tags):
             img_url = img_tag.get("src")  # Extract the 'src' attribute
             if img_url and img_url.startswith("http"):
-                img_path = download_image(img_url, page_folder, i + 1)
+                img_path = download_image(img_url, page_folder, i + 1, page_id)
                 if img_path:
                     images.append(img_path)
 
@@ -128,4 +128,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         graceful_exit()
-    
