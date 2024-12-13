@@ -12,7 +12,7 @@ import csv
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
-START_PAGE = int(os.getenv("START_PAGE", "12440"))
+START_PAGE = int(os.getenv("START_PAGE", "12453"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
