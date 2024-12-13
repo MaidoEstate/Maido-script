@@ -1,14 +1,13 @@
 import os
 import time
 import requests
+import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
-import logging
-import threading
 
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
@@ -16,23 +15,11 @@ BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
 START_PAGE = int(os.getenv("START_PAGE", "12440"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")  # Default to current directory
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 
-# Logging setup
-LOG_DIR = os.path.join(OUTPUT_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-
-logging.basicConfig(
-    filename=os.path.join(LOG_DIR, "scraper.log"),
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s]: %(message)s",
-    filemode="a"
-)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
-console_handler.setFormatter(formatter)
-logging.getLogger().addHandler(console_handler)
+# Logging Configuration
+LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 # Selenium setup
 chrome_options = Options()
@@ -54,10 +41,10 @@ def create_directory(path):
         os.makedirs(path)
 
 # Helper: Download image with retries
-def download_image(url, folder, image_counter):
+def download_image(img_url, folder, image_counter):
     for attempt in range(MAX_RETRIES):
         try:
-            img_data = requests.get(url, timeout=10).content
+            img_data = requests.get(img_url, timeout=10).content
             img_name = f"image_{image_counter}.jpg"
             img_path = os.path.join(folder, img_name)
             with open(img_path, "wb") as f:
@@ -66,7 +53,7 @@ def download_image(url, folder, image_counter):
             return img_path
         except Exception as e:
             if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
-                logging.error(f"Failed to download image {url}: {e}")
+                logging.error(f"Failed to download image {img_url}: {e}")
     return None
 
 # Scraper: Process a single page
@@ -95,7 +82,7 @@ def scrape_page(page_id, output_dir):
         images = []
         image_tags = soup.find_all("img")
         for i, img_tag in enumerate(image_tags):
-            img_url = img_tag.get("src")
+            img_url = img_tag.get("src")  # Extract the 'src' attribute
             if img_url and img_url.startswith("http"):
                 img_path = download_image(img_url, page_folder, i + 1)
                 if img_path:
@@ -141,3 +128,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         graceful_exit()
+    
