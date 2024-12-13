@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -7,9 +8,8 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
-import re
 
-# Environment variables for ChromeDriver and the last processed page file
+# Environment variables for Chromium driver and the last processed page file
 CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
 LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
 
@@ -25,41 +25,43 @@ def save_last_page(file_path, last_page):
     with open(file_path, 'w') as file:
         file.write(str(last_page))
 
-# Set up ChromeDriver
+# Set up Chromium options
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
+
+# Initialize the WebDriver
 service = Service(CHROMEDRIVER_PATH)
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Get the path where the script is located
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# Initialize the starting page
+# Check if last_page.txt exists and get the starting page ID
 last_processed_page = read_last_page(LAST_PAGE_FILE)
 if last_processed_page is not None:
     print(f"Resuming from page {last_processed_page + 1}")
     start_page = last_processed_page + 1  # Start from the next page
 else:
-    try:
-        start_page = int(input("Enter the starting page ID: "))  # Prompt the user
-    except ValueError:
-        print("Invalid input. Please enter a numeric starting page ID.")
-        driver.quit()
-        exit(1)
+    start_page = int(input("Enter the starting page ID: "))  # Fallback to manual input
 
-# Set the current page to start_page
+# Initialize scraping logic
 page = start_page
 image_counter = 1  # Initialize image counter
 base_url = "https://www.designers-osaka-chintai.info/detail/id/"
+max_pages_to_scrape = 10  # Set a limit to prevent infinite scraping
 
 while True:
+    if page > start_page + max_pages_to_scrape - 1:
+        print("Reached the maximum number of pages to scrape.")
+        break
+
     url = f"{base_url}{page}"
     print(f"Accessing URL: {url}")
     driver.get(url)
 
-    # Wait for page to load
+    # Wait for the page to load
     time.sleep(3)
 
     # Check if redirected to homepage
@@ -77,7 +79,9 @@ while True:
     csv_filename = os.path.join(page_folder, "property_details.csv")
     with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(["Page ID", "Title", "Rental Details", "Google Maps URL", "Property Description"])
+        csv_writer.writerow([
+            "Page ID", "Title", "Rental Details", "Google Maps URL", "Property Description"
+        ])
 
     # Use BeautifulSoup to parse the page source
     soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -106,7 +110,7 @@ while True:
                         image_counter += 1
 
         # Save data to CSV
-        rental_details = "Example rental details"  # Replace with actual extraction logic
+        rental_details = "Example rental details"  # Replace with your actual extraction logic
         with open(csv_filename, 'a', newline='', encoding='utf-8') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([page, title, rental_details, "Google Maps URL", "Property Description"])
