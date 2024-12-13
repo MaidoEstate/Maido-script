@@ -40,17 +40,18 @@ def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-# Helper: Download image with retries
+# Helper: Download and rename image with retries
 def download_image(img_url, folder, image_counter, page_id):
     for attempt in range(MAX_RETRIES):
         try:
             img_data = requests.get(img_url, timeout=10).content
-            img_name = f"image_{image_counter}.jpg"
-            img_path = os.path.join(folder, img_name)
+            current_date = datetime.now().strftime("%Y%m%d")
+            new_img_name = f"Maido{current_date}_{image_counter}.jpg"
+            img_path = os.path.join(folder, new_img_name)
             with open(img_path, "wb") as f:
                 f.write(img_data)
-            logging.info(f"Downloaded image from page {page_id}: {img_url} -> {img_path}")
-            return img_path
+            logging.info(f"Downloaded and renamed image for page {page_id}: {img_url} -> {new_img_name}")
+            return new_img_name
         except Exception as e:
             if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
                 logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
@@ -74,30 +75,39 @@ def scrape_page(page_id, output_dir):
         page_folder = os.path.join(output_dir, str(page_id))
         create_directory(page_folder)
 
+        # CSV File setup within the page folder
+        csv_filename = os.path.join(page_folder, "property_details.csv")
+        with open(csv_filename, "w", newline="", encoding="utf-8") as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(["Page ID", "Title", "Rental Details", "Google Maps URL", "Property Description"])
+
         # Extract property details
-        title = soup.find("h1").text.strip() if soup.find("h1") else "No title"
-        description = soup.find("div", class_="description").text.strip() if soup.find("div", class_="description") else "No description"
+        property_detail = soup.find("div", class_="main clearFix")
+        if property_detail:
+            title = property_detail.find("h1").text.strip() if property_detail.find("h1") else "No title"
+            description = soup.find("div", class_="description").text.strip() if soup.find("div", class_="description") else "No description"
+            logging.info(f"Page {page_id} - Title: {title}")
 
-        # Download images
-        images = []
-        image_tags = soup.find_all("img")
-        for i, img_tag in enumerate(image_tags):
-            img_url = img_tag.get("src")  # Extract the 'src' attribute
-            if img_url and img_url.startswith("http"):
-                img_path = download_image(img_url, page_folder, i + 1, page_id)
-                if img_path:
-                    images.append(img_path)
+            # Download and rename all images
+            image_counter = 1
+            images = []
+            image_tags = soup.find_all("img")
+            for img_tag in image_tags:
+                img_url = img_tag.get("src")  # Extract the 'src' attribute
+                if img_url and img_url.startswith("http"):
+                    new_img_name = download_image(img_url, page_folder, image_counter, page_id)
+                    if new_img_name:
+                        images.append(new_img_name)
+                        image_counter += 1
 
-        # Save data to CSV
-        csv_file = os.path.join(output_dir, "scraped_data.csv")
-        with open(csv_file, "a", newline="", encoding="utf-8") as csvfile:
-            writer = csv.writer(csvfile)
-            if os.stat(csv_file).st_size == 0:  # Write header only if file is empty
-                writer.writerow(["Page ID", "Title", "Description", "Images"])
-            writer.writerow([page_id, title, description, ", ".join(images)])
+            # Save data to CSV
+            rental_details = "Example rental details"  # Replace with actual logic
+            with open(csv_filename, "a", newline="", encoding="utf-8") as csvfile:
+                csv_writer = csv.writer(csvfile)
+                csv_writer.writerow([page_id, title, rental_details, "Google Maps URL", description])
 
-        logging.info(f"Page {page_id} scraped successfully.")
-        return True
+            logging.info(f"Page {page_id} scraped successfully.")
+            return True
 
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
