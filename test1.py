@@ -1,5 +1,4 @@
 import os
-import socket
 import time
 import re
 import requests
@@ -9,50 +8,30 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
-import signal
-import sys
+import threading
 import http.server
 import socketserver
-import threading
+import socket
 
 # Environment variables
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
 
-# Setup Chrome options
+# Selenium setup
 chrome_options = Options()
 chrome_options.binary_location = "/usr/bin/chromium"
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-
 service = Service(CHROMIUM_DRIVER_PATH)
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
-def is_port_in_use(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-def run_server():
-    port = int(os.getenv("PORT", 8080))
-    if is_port_in_use(port):
-        print(f"Port {port} is already in use. Skipping server start.")
-        return
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        print(f"Serving on port {port}")
-        httpd.serve_forever()
-
-# Graceful shutdown handler
-def graceful_exit(*args):
+# Graceful exit
+def graceful_exit():
     print("Shutting down scraper.")
     driver.quit()
-    sys.exit(0)
 
-signal.signal(signal.SIGINT, graceful_exit)
-signal.signal(signal.SIGTERM, graceful_exit)
-
-# Run dummy server
+# Run dummy HTTP server
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
@@ -63,9 +42,12 @@ def run_server():
         print(f"Port {port} is already in use. Skipping server start.")
         return
     handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        print(f"Serving on port {port}")
-        httpd.serve_forever()
+    try:
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            print(f"Serving on port {port}")
+            httpd.serve_forever()
+    except OSError as e:
+        print(f"Failed to start server on port {port}: {e}")
 
 threading.Thread(target=run_server, daemon=True).start()
 
@@ -99,7 +81,4 @@ while True:
         print(f"Error: {e}")
         break
 
-
-    
-
-driver.quit()
+graceful_exit()
