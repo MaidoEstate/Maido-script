@@ -26,6 +26,17 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 service = Service(CHROMIUM_DRIVER_PATH)
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
+def keep_alive_server():
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route("/")
+    def health_check():
+        return "Server is running.", 200
+
+    port = int(os.getenv("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
 # Graceful exit
 def graceful_exit():
     print("Shutting down scraper.")
