@@ -9,7 +9,9 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
 
-# Environment variable for the last processed page file
+# Environment variables for ChromeDriver and the last processed page file
+CHROMIUM_PATH = os.getenv("CHROMIUM_PATH", "/usr/bin/chromium")
+CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
 
 # Function to read the last processed page
@@ -24,15 +26,13 @@ def save_last_page(file_path, last_page):
     with open(file_path, 'w') as file:
         file.write(str(last_page))
 
-# Set up Chromium
+# Set up ChromeDriver
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.binary_location = "/usr/bin/chromium"  # Adjust this path if needed
-
-service = Service("/usr/bin/chromedriver")  # Path to Chromium's driver
+chrome_options.binary_location = CHROMIUM_PATH
+service = Service(CHROMIUM_DRIVER_PATH)
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Get the path where the script is located
@@ -50,6 +50,8 @@ else:
 page = start_page
 image_counter = 1  # Initialize image counter
 base_url = "https://www.designers-osaka-chintai.info/detail/id/"
+redirection_count = 0
+max_redirects = 3  # Maximum allowed redirects to homepage
 
 while True:
     url = f"{base_url}{page}"
@@ -62,7 +64,12 @@ while True:
     # Check if redirected to homepage
     if driver.current_url == "https://www.designers-osaka-chintai.info/":
         print(f"URL redirected to homepage {driver.current_url}. Stopping.")
-        break
+        redirection_count += 1
+        if redirection_count >= max_redirects:
+            break
+        continue
+
+    redirection_count = 0  # Reset the count if a valid page is found
 
     # Create a unique folder for each page ID within the script's directory
     page_folder = os.path.join(script_directory, str(page))
