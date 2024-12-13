@@ -9,6 +9,22 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
 
+import http.server
+import socketserver
+import threading
+
+# Start a simple HTTP server
+def run_server():
+    port = int(os.getenv("PORT", 8080))
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        print(f"Serving on port {port}")
+        httpd.serve_forever()
+
+# Run the HTTP server in a separate thread
+threading.Thread(target=run_server, daemon=True).start()
+
+
 # Environment variables for Chromium driver and the last processed page file
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
