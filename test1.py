@@ -29,6 +29,20 @@ chrome_options.add_argument("--disable-dev-shm-usage")
 service = Service(CHROMIUM_DRIVER_PATH)
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+def run_server():
+    port = int(os.getenv("PORT", 8080))
+    if is_port_in_use(port):
+        print(f"Port {port} is already in use. Skipping server start.")
+        return
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        print(f"Serving on port {port}")
+        httpd.serve_forever()
+
 # Graceful shutdown handler
 def graceful_exit(*args):
     print("Shutting down scraper.")
@@ -84,5 +98,8 @@ while True:
     except Exception as e:
         print(f"Error: {e}")
         break
+
+
+    
 
 driver.quit()
