@@ -99,20 +99,17 @@ def scrape_page(page_id, output_dir):
         property_detail = soup.find("div", class_="main clearFix")
         if property_detail:
             title = property_detail.find("h1").text.strip() if property_detail.find("h1") else "No title"
-            description = soup.find("div", class_="description").text.strip() if soup.find("div", class_="description") else "No description"
+            description = soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description"
             logging.info(f"Page {page_id} - Title: {title}")
 
             # Download and rename all images
             image_counter = 1
-            images = []
             image_tags = soup.find_all("img")
             for img_tag in image_tags:
-                img_url = img_tag.get("src")  # Extract the 'src' attribute
+                img_url = img_tag.get("src")
                 if img_url and img_url.startswith("http"):
-                    new_img_name = download_image(img_url, page_folder, image_counter, page_id)
-                    if new_img_name:
-                        images.append(new_img_name)
-                        image_counter += 1
+                    download_image(img_url, page_folder, image_counter, page_id)
+                    image_counter += 1
 
             # Save data to CSV
             rental_details = "Example rental details"  # Replace with actual logic
@@ -129,6 +126,7 @@ def scrape_page(page_id, output_dir):
 
 # Main scraper loop
 def main():
+    global current_page  # Reference the global current_page
     consecutive_invalid = 0
     create_directory(OUTPUT_DIR)
 
