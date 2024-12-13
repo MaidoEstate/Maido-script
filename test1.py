@@ -12,10 +12,6 @@ import csv
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
-
-
-
-logging.info(f"Starting from page {current_page}")
 START_PAGE = int(os.getenv("START_PAGE", "12453"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
@@ -37,6 +33,7 @@ if last_processed_page is not None:
 else:
     current_page = START_PAGE
 
+logging.info(f"Starting from page {current_page}")
 
 # Selenium setup
 chrome_options = Options()
@@ -132,7 +129,6 @@ def scrape_page(page_id, output_dir):
 
 # Main scraper loop
 def main():
-    current_page = START_PAGE
     consecutive_invalid = 0
     create_directory(OUTPUT_DIR)
 
@@ -155,3 +151,6 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         graceful_exit()
+
+
+
