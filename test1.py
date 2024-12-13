@@ -9,8 +9,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import csv
 
-# Environment variables for ChromeDriver and the last processed page file
-CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+# Environment variable for the last processed page file
 LAST_PAGE_FILE = os.getenv("LAST_PAGE_FILE", "last_page.txt")
 
 # Function to read the last processed page
@@ -25,12 +24,15 @@ def save_last_page(file_path, last_page):
     with open(file_path, 'w') as file:
         file.write(str(last_page))
 
-# Set up ChromeDriver
+# Set up Chromium
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-service = Service(CHROMEDRIVER_PATH)
+chrome_options.add_argument("--disable-gpu")
+chrome_options.binary_location = "/usr/bin/chromium"  # Adjust this path if needed
+
+service = Service("/usr/bin/chromedriver")  # Path to Chromium's driver
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Get the path where the script is located
