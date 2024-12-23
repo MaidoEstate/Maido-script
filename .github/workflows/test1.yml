@@ -13,9 +13,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.11 # Ensure this matches your script's Python version
+          python-version: 3.11
 
-      - name: Install Dependencies
+      - name: Install Chromium and ChromeDriver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
+
+      - name: Install Python Dependencies
         run: pip install -r requirements.txt
 
       - name: Run Test1 Script
@@ -23,5 +28,4 @@ jobs:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
-          ACTIONS_STEP_DEBUG: true
         run: python test1.py
