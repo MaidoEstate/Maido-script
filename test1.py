@@ -13,7 +13,7 @@ import csv
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
 BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
-START_PAGE = int(os.getenv("START_PAGE", "12498"))
+START_PAGE = int(os.getenv("START_PAGE", "12453"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
@@ -24,9 +24,13 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 # Check if last_page.txt exists and get the starting page ID
 last_processed_page = None
-if os.path.exists("last_page.txt"):
-    with open("last_page.txt", "r") as file:
-        last_processed_page = int(file.read().strip())
+try:
+    if os.path.exists("last_page.txt"):
+        with open("last_page.txt", "r") as file:
+            last_processed_page = int(file.read().strip())
+except (FileNotFoundError, ValueError):
+    logging.warning("No valid last_page.txt found. Starting from START_PAGE.")
+    last_processed_page = None
 
 # Start from the higher of START_PAGE or the saved last processed page
 if last_processed_page is not None:
@@ -35,6 +39,11 @@ else:
     current_page = START_PAGE
 
 logging.info(f"Starting from page {current_page}")
+
+# Validate environment configuration
+if not os.path.exists(CHROMIUM_DRIVER_PATH):
+    logging.error(f"Chromium driver not found at {CHROMIUM_DRIVER_PATH}. Check your environment variables.")
+    exit(1)
 
 # Selenium setup
 chrome_options = Options()
