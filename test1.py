@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import requests
 import logging
@@ -56,20 +57,25 @@ def create_directory(path):
 
 # Helper: Download and rename image with retries
 def download_image(img_url, folder, image_counter, page_id):
-    for attempt in range(MAX_RETRIES):
-        try:
-            img_data = requests.get(img_url, timeout=10).content
-            current_date = datetime.now().strftime("%Y%m%d")
-            new_img_name = f"Maido{current_date}_{image_counter}.jpg"
-            img_path = os.path.join(folder, new_img_name)
-            with open(img_path, "wb") as f:
-                f.write(img_data)
-            logging.info(f"Downloaded and renamed image for page {page_id}: {img_url} -> {new_img_name}")
-            return new_img_name
-        except Exception as e:
-            if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
-                logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
-    return None
+    img_name = os.path.basename(img_url)
+    if re.match(r'^\d', img_name):  # Check if the image name starts with a digit
+        for attempt in range(MAX_RETRIES):
+            try:
+                img_data = requests.get(img_url, timeout=10).content
+                current_date = datetime.now().strftime("%Y%m%d")
+                new_img_name = f"Maido{current_date}_{image_counter}.jpg"
+                img_path = os.path.join(folder, new_img_name)
+                with open(img_path, "wb") as f:
+                    f.write(img_data)
+                logging.info(f"Downloaded and renamed image for page {page_id}: {img_url} -> {new_img_name}")
+                return new_img_name
+            except Exception as e:
+                if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
+                    logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
+        return None
+    else:
+        logging.info(f"Image {img_name} skipped as it does not start with a digit.")
+        return None
 
 # Scraper: Process a single page
 def scrape_page(page_id, output_dir):
@@ -149,6 +155,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         graceful_exit()
-
-
-
