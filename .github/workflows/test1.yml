@@ -20,7 +20,7 @@ jobs:
 
       - name: Run Test1 Script
         env:
-          START_PAGE: 12440
+          START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
           ACTIONS_STEP_DEBUG: true
