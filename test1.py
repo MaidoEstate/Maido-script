@@ -35,11 +35,15 @@ def configure_git():
 
 # Function to commit the file to Git
 def commit_to_git(file_path):
+    pat = os.getenv("GITHUB_PAT")  # Ensure the PAT is being read
+    if not pat:
+        logging.error("GITHUB_PAT is not set. Cannot push to GitHub.")
+        return
     try:
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
         subprocess.run(
-            ["git", "push", f"https://{GITHUB_PAT}@github.com/MaidoEstate/Maido-script.git", "main"],
+            ["git", "push", f"https://{pat}@github.com/MaidoEstate/Maido-script.git", "main"],
             check=True,
         )
         logging.info(f"Committed and pushed {file_path} to Git.")
