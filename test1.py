@@ -23,6 +23,24 @@ OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
+# Git Configuration
+def configure_git():
+    try:
+        subprocess.run(["git", "config", "user.name", "MaidoEstate"], check=True)
+        subprocess.run(["git", "config", "user.email", "Alan@real-estate-osaka.com"], check=True)
+        logging.info("Git user identity configured.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to configure Git user identity: {e}")
+
+# Function to commit the file to Git
+def commit_to_git(file_path):
+    try:
+        subprocess.run(["git", "add", file_path], check=True)
+        subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
+        logging.info(f"Committed {file_path} to Git.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to commit {file_path} to Git: {e}")
+
 # Check if last_page.txt exists and get the starting page ID
 last_processed_page = None
 try:
@@ -140,21 +158,14 @@ def scrape_page(page_id, output_dir):
         logging.error(f"Error scraping page {page_id}: {e}")
         return None
 
-# Helper: Commit changes to Git
-def commit_to_git(file_path):
-    try:
-        subprocess.run(["git", "add", file_path], check=True)
-        subprocess.run(["git", "commit", "-m", f"Update {file_path} via script"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        logging.info(f"Changes to {file_path} committed and pushed to Git.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to commit {file_path} to Git: {e}")
-
 # Main scraper loop
 def main():
     global current_page  # Reference the global current_page
     consecutive_invalid = 0
     create_directory(OUTPUT_DIR)
+
+    # Configure Git before starting
+    configure_git()
 
     while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
         logging.info(f"Scraping page {current_page}...")
@@ -164,7 +175,7 @@ def main():
             # Write the current page to the last_page.txt file
             with open("last_page.txt", "w") as file:
                 file.write(str(current_page))
-            # Commit changes to Git
+            # Commit the updated file to Git
             commit_to_git("last_page.txt")
         else:
             consecutive_invalid += 1  # Increment on failure
@@ -180,5 +191,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         graceful_exit()
-
-
