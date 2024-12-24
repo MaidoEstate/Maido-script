@@ -8,29 +8,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the repository
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
+      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
+      # Step 3: Install Chromium and Chromedriver
       - name: Install Chromium and Chromedriver
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+          sudo apt-get install -y google-chrome-stable chromium-chromedriver
 
+      # Step 4: Verify installation of Chromium and Chromedriver
       - name: Verify Installation
         run: |
-          which chromium || echo "Chromium not found"
-          chromium --version || echo "Unable to determine Chromium version"
+          which google-chrome || echo "Google Chrome not found"
+          google-chrome --version || echo "Unable to determine Chrome version"
           which chromedriver || echo "Chromedriver not found"
           chromedriver --version || echo "Unable to determine Chromedriver version"
 
+      # Step 5: Install dependencies
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
+      # Step 6: Run the test1.py script
       - name: Run Test1 Script
         env:
           START_PAGE: 12498
@@ -40,11 +46,13 @@ jobs:
           ACTIONS_STEP_DEBUG: true
         run: python test1.py
 
+      # Step 7: Configure Git credentials
       - name: Configure Git
         run: |
           git config user.name "MaidoEstate"
           git config user.email "Alan@real-estate-osaka.com"
 
+      # Step 8: Commit and push changes to the repository
       - name: Commit and Push Changes
         run: |
           git add last_page.txt
