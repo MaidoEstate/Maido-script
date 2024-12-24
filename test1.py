@@ -37,6 +37,7 @@ def commit_to_git(file_path):
     try:
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)  # Replace 'main' with your branch name if needed
         logging.info(f"Committed {file_path} to Git.")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to commit {file_path} to Git: {e}")
