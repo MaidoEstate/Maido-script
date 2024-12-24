@@ -1,7 +1,7 @@
 name: Run Test1 Script
 
 on:
-  workflow_dispatch: # Allows manual trigger of the workflow
+  workflow_dispatch:
 
 jobs:
   test1-script:
@@ -15,12 +15,19 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install Chromium and ChromeDriver
+      - name: Install Chromium and Chromedriver
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser chromium-chromedriver
 
-      - name: Install Python Dependencies
+      - name: Verify Installation
+        run: |
+          which chromium || echo "Chromium not found"
+          chromium --version || echo "Unable to determine Chromium version"
+          which chromedriver || echo "Chromedriver not found"
+          chromedriver --version || echo "Unable to determine Chromedriver version"
+
+      - name: Install Dependencies
         run: pip install -r requirements.txt
 
       - name: Run Test1 Script
@@ -28,4 +35,5 @@ jobs:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
+          ACTIONS_STEP_DEBUG: true
         run: python test1.py
