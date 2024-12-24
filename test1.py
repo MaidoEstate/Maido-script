@@ -150,6 +150,9 @@ def main():
         result = scrape_page(current_page, OUTPUT_DIR)
         if result:
             consecutive_invalid = 0  # Reset on success
+            # Write the current page to the last_page.txt file
+            with open("last_page.txt", "w") as file:
+                file.write(str(current_page))
         else:
             consecutive_invalid += 1  # Increment on failure
             logging.warning(f"Consecutive invalid pages: {consecutive_invalid}")
