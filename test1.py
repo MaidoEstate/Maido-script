@@ -18,6 +18,9 @@ START_PAGE = int(os.getenv("START_PAGE", "12453"))
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
+GITHUB_USERNAME = "MaidoEstate"
+GITHUB_REPO = "Maido-script"
+GITHUB_PAT = "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"
 
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
@@ -26,7 +29,7 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 # Git Configuration
 def configure_git():
     try:
-        subprocess.run(["git", "config", "user.name", "MaidoEstate"], check=True)
+        subprocess.run(["git", "config", "user.name", GITHUB_USERNAME], check=True)
         subprocess.run(["git", "config", "user.email", "Alan@real-estate-osaka.com"], check=True)
         logging.info("Git user identity configured.")
     except subprocess.CalledProcessError as e:
@@ -35,9 +38,12 @@ def configure_git():
 # Function to commit the file to Git
 def commit_to_git(file_path):
     try:
+        # Set the remote URL with authentication
+        remote_url = f"https://{GITHUB_USERNAME}:{GITHUB_PAT}@github.com/{GITHUB_USERNAME}/{GITHUB_REPO}.git"
+        subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True)  # Replace 'main' with your branch name if needed
+        subprocess.run(["git", "push", "origin", "main"], check=True)
         logging.info(f"Committed {file_path} to Git.")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to commit {file_path} to Git: {e}")
