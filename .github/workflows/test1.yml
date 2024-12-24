@@ -1,4 +1,4 @@
-name: Run Test1 Script
+name: Run Test1 Script and Commit Updates
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
 jobs:
   test1-script:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -37,3 +38,16 @@ jobs:
           OUTPUT_DIR: ./scraped_data
           ACTIONS_STEP_DEBUG: true
         run: python test1.py
+
+      - name: Configure Git
+        run: |
+          git config user.name "MaidoEstate"
+          git config user.email "Alan@real-estate-osaka.com"
+
+      - name: Commit and Push Changes
+        run: |
+          git add last_page.txt
+          git commit -m "Update last_page.txt via script"
+          git push https://$GITHUB_PAT@github.com/MaidoEstate/Maido-script.git main
+        env:
+          GITHUB_PAT: ${{ secrets.PAT }}
