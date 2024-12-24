@@ -36,6 +36,7 @@ jobs:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
+          GITHUB_PAT: ${{ secrets.PAT }}
           ACTIONS_STEP_DEBUG: true
         run: python test1.py
 
