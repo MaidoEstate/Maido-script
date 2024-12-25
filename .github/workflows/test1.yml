@@ -55,8 +55,9 @@ jobs:
       # Step 8: Commit and push changes to the repository
       - name: Commit and Push Changes
         run: |
+          echo "Debug: PAT length is ${#GITHUB_PAT}"
           git add last_page.txt
           git commit -m "Update last_page.txt via script"
-          git push https://x-access-token:${{ secrets.PAT }}@github.com/MaidoEstate/Maido-script.git main
+          git push https://$GITHUB_PAT@github.com/MaidoEstate/Maido-script.git HEAD:main
         env:
           GITHUB_PAT: ${{ secrets.PAT }}
