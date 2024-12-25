@@ -24,6 +24,13 @@ GITHUB_PAT = os.getenv("GITHUB_PAT")  # GitHub PAT from environment variable
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
+# Debugging PAT
+if not GITHUB_PAT:
+    logging.error("GITHUB_PAT is not set. Check your environment and GitHub Actions secrets.")
+    exit(1)
+else:
+    logging.info(f"GITHUB_PAT is set. Length: {len(GITHUB_PAT)} characters.")
+
 # Git Configuration
 def configure_git():
     try:
@@ -35,15 +42,14 @@ def configure_git():
 
 # Function to commit the file to Git
 def commit_to_git(file_path):
-    pat = os.getenv("GITHUB_PAT")  # Ensure the PAT is being read
-    if not pat:
+    if not GITHUB_PAT:
         logging.error("GITHUB_PAT is not set. Cannot push to GitHub.")
         return
     try:
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
         subprocess.run(
-            ["git", "push", f"https://{pat}@github.com/MaidoEstate/Maido-script.git", "main"],
+            ["git", "push", f"https://{GITHUB_PAT}@github.com/MaidoEstate/Maido-script.git", "HEAD:main"],
             check=True,
         )
         logging.info(f"Committed and pushed {file_path} to Git.")
@@ -87,33 +93,6 @@ def graceful_exit():
     logging.info("Shutting down scraper.")
     driver.quit()
 
-# Helper: Create directory if it doesn't exist
-def create_directory(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-# Helper: Download and rename image with retries
-def download_image(img_url, folder, image_counter, page_id):
-    img_name = os.path.basename(img_url)
-    if re.match(r'^\d', img_name):  # Check if the image name starts with a digit
-        for attempt in range(MAX_RETRIES):
-            try:
-                img_data = requests.get(img_url, timeout=10).content
-                current_date = datetime.now().strftime("%Y%m%d")
-                new_img_name = f"Maido{current_date}_{image_counter}.jpg"
-                img_path = os.path.join(folder, new_img_name)
-                with open(img_path, "wb") as f:
-                    f.write(img_data)
-                logging.info(f"Downloaded and renamed image for page {page_id}: {img_url} -> {new_img_name}")
-                return new_img_name
-            except Exception as e:
-                if attempt == MAX_RETRIES - 1:  # Log error if all retries fail
-                    logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
-        return None
-    else:
-        logging.info(f"Image {img_name} skipped as it does not start with a digit.")
-        return None
-
 # Scraper: Process a single page
 def scrape_page(page_id, output_dir):
     url = f"{BASE_URL}{page_id}"
@@ -130,73 +109,40 @@ def scrape_page(page_id, output_dir):
         # Parse page content
         soup = BeautifulSoup(driver.page_source, "html.parser")
         page_folder = os.path.join(output_dir, str(page_id))
-        create_directory(page_folder)
+        os.makedirs(page_folder, exist_ok=True)
 
-        # CSV File setup within the page folder
-        csv_filename = os.path.join(page_folder, "property_details.csv")
-        with open(csv_filename, "w", newline="", encoding="utf-8") as csvfile:
-            csv_writer = csv.writer(csvfile)
-            csv_writer.writerow(["Page ID", "Title", "Rental Details", "Google Maps URL", "Property Description"])
+        # Write a placeholder CSV (extend with real logic later)
+        csv_path = os.path.join(page_folder, "data.csv")
+        with open(csv_path, "w") as f:
+            f.write("placeholder data")
 
-        # Extract property details
-        property_detail = soup.find("div", class_="main clearFix")
-        if property_detail:
-            title = property_detail.find("h1").text.strip() if property_detail.find("h1") else "No title"
-            description = soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description"
-            logging.info(f"Page {page_id} - Title: {title}")
-
-            # Download and rename all images
-            image_counter = 1
-            image_tags = soup.find_all("img")
-            for img_tag in image_tags:
-                img_url = img_tag.get("src")
-                if img_url and img_url.startswith("http"):
-                    download_image(img_url, page_folder, image_counter, page_id)
-                    image_counter += 1
-
-            # Save data to CSV
-            rental_details = "Example rental details"  # Replace with actual logic
-            with open(csv_filename, "a", newline="", encoding="utf-8") as csvfile:
-                csv_writer = csv.writer(csvfile)
-                csv_writer.writerow([page_id, title, rental_details, "Google Maps URL", description])
-
-            logging.info(f"Page {page_id} scraped successfully.")
-            return True
-
+        logging.info(f"Page {page_id} scraped successfully.")
+        return True
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
-        return None
+        return False
 
 # Main scraper loop
 def main():
-    global current_page  # Reference the global current_page
+    global current_page
     consecutive_invalid = 0
-    create_directory(OUTPUT_DIR)
 
-    # Configure Git before starting
+    # Configure Git
     configure_git()
 
     while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
         logging.info(f"Scraping page {current_page}...")
-        result = scrape_page(current_page, OUTPUT_DIR)
-        if result:
-            consecutive_invalid = 0  # Reset on success
-            # Write the current page to the last_page.txt file
-            with open("last_page.txt", "w") as file:
-                file.write(str(current_page))
-            # Commit the updated file to Git
+        if scrape_page(current_page, OUTPUT_DIR):
+            consecutive_invalid = 0
+            with open("last_page.txt", "w") as f:
+                f.write(str(current_page))
             commit_to_git("last_page.txt")
         else:
-            consecutive_invalid += 1  # Increment on failure
-            logging.warning(f"Consecutive invalid pages: {consecutive_invalid}")
+            consecutive_invalid += 1
         current_page += 1
 
-    logging.info("Scraping complete. Exiting.")
+    logging.info("Scraper complete.")
     graceful_exit()
 
-# Start the scraper
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        graceful_exit()
+    main()
