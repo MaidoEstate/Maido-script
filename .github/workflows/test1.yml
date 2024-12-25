@@ -56,8 +56,8 @@ jobs:
       - name: Commit and Push Changes
         run: |
           echo "Debug: PAT length is ${#GITHUB_PAT}"
-          git add last_page.txt
-          git commit -m "Update last_page.txt via script"
-          git push https://$GITHUB_PAT@github.com/MaidoEstate/Maido-script.git HEAD:main
+          git add -A  # Add all changes, including untracked files
+          git commit -m "Update last_page.txt and scraped data via script" || echo "No changes to commit"
+          git push "https://${{ secrets.PAT }}@github.com/MaidoEstate/Maido-script.git" main
         env:
           GITHUB_PAT: ${{ secrets.PAT }}
