@@ -42,10 +42,6 @@ def configure_git():
 
 # Function to commit the file to Git
 def commit_to_git(file_path):
-    pat = os.getenv("GITHUB_PAT")  # Ensure the PAT is being read
-    if not pat:
-        logging.error("GITHUB_PAT is not set. Cannot push to GitHub.")
-        return
     try:
         # Pull the latest changes from the remote repository
         subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
@@ -56,49 +52,34 @@ def commit_to_git(file_path):
         
         # Push the changes to the remote repository
         subprocess.run(
-            ["git", "push", f"https://{pat}@github.com/MaidoEstate/Maido-script.git", "HEAD:main"],
+            ["git", "push", f"https://{GITHUB_PAT}@github.com/MaidoEstate/Maido-script.git", "HEAD:main"],
             check=True,
         )
         logging.info(f"Committed and pushed {file_path} to Git.")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to commit and push {file_path} to Git: {e}")
 
-# Check if last_page.txt exists and get the starting page ID
-last_processed_page = None
-try:
-    if os.path.exists("last_page.txt"):
-        with open("last_page.txt", "r") as file:
-            last_processed_page = int(file.read().strip())
-except (FileNotFoundError, ValueError):
-    logging.warning("No valid last_page.txt found. Starting from START_PAGE.")
-    last_processed_page = None
-
-# Start from the higher of START_PAGE or the saved last processed page
-if last_processed_page is not None:
-    current_page = max(START_PAGE, last_processed_page + 1)
-else:
-    current_page = START_PAGE
-
-logging.info(f"Starting from page {current_page}")
-
-# Validate environment configuration
-if not os.path.exists(CHROMIUM_DRIVER_PATH):
-    logging.error(f"Chromium driver not found at {CHROMIUM_DRIVER_PATH}. Check your environment variables.")
-    exit(1)
-
-# Selenium setup
-chrome_options = Options()
-chrome_options.binary_location = "/usr/bin/chromium-browser"
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-service = Service(CHROMIUM_DRIVER_PATH)
-driver = webdriver.Chrome(service=service, options=chrome_options)
-
-# Graceful exit
-def graceful_exit():
-    logging.info("Shutting down scraper.")
-    driver.quit()
+# Download and rename images
+def download_image(img_url, folder, image_counter, page_id):
+    img_name = os.path.basename(img_url)
+    if re.match(r'^\d', img_name):  # Check if the image name starts with a digit
+        for attempt in range(MAX_RETRIES):
+            try:
+                img_data = requests.get(img_url, timeout=10).content
+                current_date = datetime.now().strftime("%Y%m%d")
+                new_img_name = f"Maido{current_date}_{image_counter}.jpg"
+                img_path = os.path.join(folder, new_img_name)
+                with open(img_path, "wb") as f:
+                    f.write(img_data)
+                logging.info(f"Downloaded and renamed image for page {page_id}: {img_url} -> {new_img_name}")
+                return new_img_name
+            except Exception as e:
+                if attempt == MAX_RETRIES - 1:
+                    logging.error(f"Failed to download image from page {page_id}: {img_url}: {e}")
+        return None
+    else:
+        logging.info(f"Image {img_name} skipped as it does not start with a digit.")
+        return None
 
 # Scraper: Process a single page
 def scrape_page(page_id, output_dir):
@@ -118,13 +99,36 @@ def scrape_page(page_id, output_dir):
         page_folder = os.path.join(output_dir, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
-        # Write a placeholder CSV (extend with real logic later)
-        csv_path = os.path.join(page_folder, "data.csv")
-        with open(csv_path, "w") as f:
-            f.write("placeholder data")
+        # Extract property details
+        property_detail = soup.find("div", class_="main clearFix")
+        if not property_detail:
+            logging.warning(f"No property details found on page {page_id}.")
+            return False
+        
+        title = property_detail.find("h1").text.strip() if property_detail.find("h1") else "No title"
+        description = soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description"
+        rental_details = "Example rental details"  # Placeholder, replace with actual logic
+        logging.info(f"Page {page_id} - Title: {title}")
+
+        # Download and rename all images
+        image_counter = 1
+        image_tags = soup.find_all("img")
+        for img_tag in image_tags:
+            img_url = img_tag.get("src")
+            if img_url and img_url.startswith("http"):
+                download_image(img_url, page_folder, image_counter, page_id)
+                image_counter += 1
+
+        # Save data to CSV
+        csv_filename = os.path.join(page_folder, "property_details.csv")
+        with open(csv_filename, "w", newline="", encoding="utf-8") as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(["Page ID", "Title", "Rental Details", "Description"])
+            csv_writer.writerow([page_id, title, rental_details, description])
 
         logging.info(f"Page {page_id} scraped successfully.")
         return True
+
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
