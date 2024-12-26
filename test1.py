@@ -43,14 +43,9 @@ def configure_git():
 # Function to commit the file to Git
 def commit_to_git(file_path):
     try:
-        # Pull the latest changes from the remote repository
         subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
-        
-        # Add and commit the file
         subprocess.run(["git", "add", file_path], check=True)
         subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
-        
-        # Push the changes to the remote repository
         subprocess.run(
             ["git", "push", f"https://{GITHUB_PAT}@github.com/MaidoEstate/Maido-script.git", "HEAD:main"],
             check=True,
@@ -62,7 +57,7 @@ def commit_to_git(file_path):
 # Download and rename images
 def download_image(img_url, folder, image_counter, page_id):
     img_name = os.path.basename(img_url)
-    if re.match(r'^\d', img_name):  # Check if the image name starts with a digit
+    if re.match(r'^\d', img_name):
         for attempt in range(MAX_RETRIES):
             try:
                 img_data = requests.get(img_url, timeout=10).content
@@ -89,17 +84,14 @@ def scrape_page(page_id, output_dir):
         driver.get(url)
         time.sleep(2)
 
-        # Check if redirected to homepage
         if driver.current_url == "https://www.designers-osaka-chintai.info/":
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
-            return None
+            return False
 
-        # Parse page content
         soup = BeautifulSoup(driver.page_source, "html.parser")
         page_folder = os.path.join(output_dir, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
-        # Extract property details
         property_detail = soup.find("div", class_="main clearFix")
         if not property_detail:
             logging.warning(f"No property details found on page {page_id}.")
@@ -107,10 +99,9 @@ def scrape_page(page_id, output_dir):
         
         title = property_detail.find("h1").text.strip() if property_detail.find("h1") else "No title"
         description = soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description"
-        rental_details = "Example rental details"  # Placeholder, replace with actual logic
+        rental_details = "Example rental details"
         logging.info(f"Page {page_id} - Title: {title}")
 
-        # Download and rename all images
         image_counter = 1
         image_tags = soup.find_all("img")
         for img_tag in image_tags:
@@ -119,7 +110,6 @@ def scrape_page(page_id, output_dir):
                 download_image(img_url, page_folder, image_counter, page_id)
                 image_counter += 1
 
-        # Save data to CSV
         csv_filename = os.path.join(page_folder, "property_details.csv")
         with open(csv_filename, "w", newline="", encoding="utf-8") as csvfile:
             csv_writer = csv.writer(csvfile)
@@ -136,9 +126,9 @@ def scrape_page(page_id, output_dir):
 # Main scraper loop
 def main():
     global current_page
+    current_page = START_PAGE
     consecutive_invalid = 0
 
-    # Configure Git
     configure_git()
 
     while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
@@ -156,4 +146,15 @@ def main():
     graceful_exit()
 
 if __name__ == "__main__":
-    main()
+    chrome_options = Options()
+    chrome_options.binary_location = "/usr/bin/chromium-browser"
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    service = Service(CHROMIUM_DRIVER_PATH)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    try:
+        main()
+    except KeyboardInterrupt:
+        graceful_exit()
