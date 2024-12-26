@@ -88,9 +88,9 @@ def scrape_page(page_id, output_dir):
     try:
         driver.get(url)
         time.sleep(2)
-        if driver.current_url == BASE_URL:  # Redirected to homepage
+        if driver.current_url == "https://www.designers-osaka-chintai.info/":  # Redirected to homepage
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
-            return None
+            return False
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         page_folder = os.path.join(output_dir, str(page_id))
@@ -136,12 +136,12 @@ def main():
         logging.info(f"Scraping page {current_page}...")
         success = scrape_page(current_page, OUTPUT_DIR)
         if success:
-            # Update last_page.txt only if scraping is successful
+            # Update last_page.txt and increment only if successful
             with open("last_page.txt", "w") as f:
                 f.write(str(current_page))
             commit_and_push("last_page.txt")
             consecutive_invalid = 0
-            current_page += 1  # Increment page number only for valid pages
+            current_page += 1  # Only increment if the scrape is successful
         else:
             consecutive_invalid += 1
             logging.info(f"Skipping page {current_page} due to invalid or redirected response.")
