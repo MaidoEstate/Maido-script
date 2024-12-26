@@ -125,7 +125,6 @@ def scrape_page(page_id, output_dir):
 
 # Main scraper loop
 def main():
-    global current_page
     current_page = START_PAGE
     consecutive_invalid = 0
 
