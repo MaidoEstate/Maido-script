@@ -145,15 +145,17 @@ def main():
         logging.info(f"Scraping page {current_page}...")
         success = scrape_page(current_page, OUTPUT_DIR)
         if success:
-            # Update last_page.txt and increment only if successful
+            # Update last_page.txt
             with open("last_page.txt", "w") as f:
                 f.write(str(current_page))
             commit_and_push("last_page.txt")
-            consecutive_invalid = 0
-            current_page += 1  # Only increment if the scrape is successful
+            consecutive_invalid = 0  # Reset invalid counter
         else:
             consecutive_invalid += 1
-            logging.info(f"Skipping page {current_page} due to invalid or redirected response.")
+            logging.warning(f"Page {current_page} invalid. Consecutive invalid: {consecutive_invalid}")
+
+        # Increment page regardless of success
+        current_page += 1
 
 if __name__ == "__main__":
     # Selenium setup
