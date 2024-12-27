@@ -17,25 +17,19 @@ BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
 MAX_CONSECUTIVE_INVALID = 10
 MAX_RETRIES = 3
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
-START_PAGE = 12453  # Default starting page
+START_PAGE = int(os.getenv("START_PAGE", 12453))  # Default starting page
 GITHUB_PAT = os.getenv("GITHUB_PAT")
-WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
-WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
-# Check essential configuration
+# Check GitHub PAT
 if not GITHUB_PAT:
     logging.error("GITHUB_PAT is not set. Check your environment and GitHub Actions secrets.")
     exit(1)
-if not WEBFLOW_API_TOKEN:
-    logging.error("WEBFLOW_API_TOKEN is not set. Check your environment variables or GitHub Actions secrets.")
-    exit(1)
-if not WEBFLOW_COLLECTION_ID:
-    logging.error("WEBFLOW_COLLECTION_ID is not set. Ensure you've added the correct collection ID.")
-    exit(1)
+else:
+    logging.info(f"GITHUB_PAT is set. Length: {len(GITHUB_PAT)} characters.")
 
 # Git Helper Functions
 def configure_git():
@@ -80,7 +74,7 @@ def download_image(img_url, folder, image_counter, page_id):
                 with open(img_path, "wb") as f:
                     f.write(img_data)
                 logging.info(f"Downloaded image for page {page_id}: {img_url} -> {new_img_name}")
-                return img_path  # Return the full path of the image
+                return new_img_name
             except Exception as e:
                 logging.error(f"Failed to download image from page {page_id}: {e}")
         return None
@@ -107,7 +101,8 @@ def scrape_page(page_id, output_dir):
             "page_id": page_id,
             "title": soup.find("h1").text.strip() if soup.find("h1") else "No title",
             "description": soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description",
-            "images": [],
+            "big_images": [],
+            "small_images": [],
         }
 
         image_counter = 1
@@ -116,48 +111,23 @@ def scrape_page(page_id, output_dir):
             if img_url and img_url.startswith("http"):
                 downloaded_image = download_image(img_url, page_folder, image_counter, page_id)
                 if downloaded_image:
-                    property_data["images"].append(downloaded_image)
+                    if "big" in img_url.lower():
+                        property_data["big_images"].append(downloaded_image)
+                    else:
+                        property_data["small_images"].append(downloaded_image)
                     image_counter += 1
 
-        # Upload to Webflow
-        upload_to_webflow(property_data)
+        # Save property details to JSON
+        json_path = os.path.join(page_folder, f"property_{page_id}.json")
+        with open(json_path, "w", encoding="utf-8") as jsonfile:
+            json.dump(property_data, jsonfile, indent=4, ensure_ascii=False)
 
-        logging.info(f"Page {page_id} scraped and uploaded successfully.")
+        logging.info(f"Page {page_id} scraped successfully.")
         return True
 
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
-
-# Webflow Upload Function
-def upload_to_webflow(property_data):
-    headers = {
-        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
-        "Content-Type": "application/json",
-        "accept-version": "1.0.0"
-    }
-    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
-
-    # Prepare Webflow data
-    webflow_data = {
-        "fields": {
-            "name": property_data["title"],
-            "slug": f"property-{property_data['page_id']}",
-            "description": property_data["description"],
-            "_archived": False,
-            "_draft": False,
-            "images": property_data["images"],  # Assuming you have an image field in Webflow
-        }
-    }
-
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(webflow_data))
-        if response.status_code in (200, 201):
-            logging.info(f"Item successfully uploaded to Webflow: {response.json()}")
-        else:
-            logging.error(f"Failed to upload item to Webflow: {response.status_code}, {response.text}")
-    except Exception as e:
-        logging.error(f"Error while uploading item to Webflow: {e}")
 
 # Main Function
 def main():
@@ -175,19 +145,16 @@ def main():
         logging.info(f"Scraping page {current_page}...")
         success = scrape_page(current_page, OUTPUT_DIR)
         if success:
-            # Update last_page.txt and reset the invalid counter
+            # Update last_page.txt and increment only if successful
             with open("last_page.txt", "w") as f:
                 f.write(str(current_page))
             commit_and_push("last_page.txt")
-            consecutive_invalid = 0  # Reset invalid counter
+            consecutive_invalid = 0
         else:
-            logging.warning(f"Page {current_page} invalid or redirected. Consecutive invalid: {consecutive_invalid + 1}")
             consecutive_invalid += 1
 
-        # Always increment the page number
+        # Move to the next page regardless of success or failure
         current_page += 1
-
-    logging.info("Max consecutive invalid pages reached. Stopping the scraper.")
 
 if __name__ == "__main__":
     # Selenium setup
