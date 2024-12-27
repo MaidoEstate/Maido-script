@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
-import csv
+import json
 
 # Configuration
 CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
@@ -97,21 +97,30 @@ def scrape_page(page_id, output_dir):
         os.makedirs(page_folder, exist_ok=True)
 
         # Extract details and images
-        title = soup.find("h1").text.strip() if soup.find("h1") else "No title"
-        description = soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description"
+        property_data = {
+            "page_id": page_id,
+            "title": soup.find("h1").text.strip() if soup.find("h1") else "No title",
+            "description": soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description",
+            "big_images": [],
+            "small_images": [],
+        }
+
         image_counter = 1
         for img_tag in soup.find_all("img"):
             img_url = img_tag.get("src")
             if img_url and img_url.startswith("http"):
-                download_image(img_url, page_folder, image_counter, page_id)
-                image_counter += 1
+                downloaded_image = download_image(img_url, page_folder, image_counter, page_id)
+                if downloaded_image:
+                    if "big" in img_url.lower():
+                        property_data["big_images"].append(downloaded_image)
+                    else:
+                        property_data["small_images"].append(downloaded_image)
+                    image_counter += 1
 
-        # Save property details to CSV
-        csv_path = os.path.join(page_folder, "property_details.csv")
-        with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["Page ID", "Title", "Description"])
-            writer.writerow([page_id, title, description])
+        # Save property details to JSON
+        json_path = os.path.join(page_folder, f"property_{page_id}.json")
+        with open(json_path, "w", encoding="utf-8") as jsonfile:
+            json.dump(property_data, jsonfile, indent=4, ensure_ascii=False)
 
         logging.info(f"Page {page_id} scraped successfully.")
         return True
