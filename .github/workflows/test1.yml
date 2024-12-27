@@ -1,4 +1,4 @@
-name: Run Test1 Script and Commit Updates
+name: Run Test1 Script, Commit Updates, and Upload to Webflow
 
 on:
   workflow_dispatch:
@@ -36,15 +36,18 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      # Step 6: Run the test1.py script
-      - name: Run Test1 Script
+      # Step 6: Run the test1.py script and upload to Webflow
+      - name: Run Test1 Script with Upload
         env:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
           GITHUB_PAT: ${{ secrets.PAT }}
+          WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
+          WEBFLOW_COLLECTION_ID: ${{ secrets.WEBFLOW_COLLECTION_ID }}
           ACTIONS_STEP_DEBUG: true
-        run: python test1.py
+        run: |
+          python test1.py && python upload_to_webflow.py
 
       # Step 7: Configure Git credentials
       - name: Configure Git
