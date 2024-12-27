@@ -152,6 +152,7 @@ def main():
             consecutive_invalid = 0
         else:
             consecutive_invalid += 1
+            logging.warning(f"Page {current_page} was invalid or redirected.")
 
         # Move to the next page regardless of success or failure
         current_page += 1
