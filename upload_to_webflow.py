@@ -11,6 +11,23 @@ CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
+# Check essential configuration
+logging.info(f"CLOUDINARY_CLOUD_NAME: {CLOUDINARY_CLOUD_NAME}")
+logging.info(f"CLOUDINARY_API_KEY: {CLOUDINARY_API_KEY}")
+logging.info(f"CLOUDINARY_API_SECRET: {'Set' if CLOUDINARY_API_SECRET else 'Not Set'}")
+
+if not WEBFLOW_API_TOKEN:
+    logging.error("WEBFLOW_API_TOKEN is not set. Check your environment variables or GitHub Actions secrets.")
+    exit(1)
+
+if not WEBFLOW_COLLECTION_ID:
+    logging.error("WEBFLOW_COLLECTION_ID is not set. Ensure you've added the correct collection ID.")
+    exit(1)
+
+if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
+    logging.error("Cloudinary configuration is incomplete. Ensure all Cloudinary credentials are set.")
+    exit(1)
+
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
