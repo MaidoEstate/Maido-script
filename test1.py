@@ -19,50 +19,75 @@ MAX_RETRIES = 3
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 START_PAGE = int(os.getenv("START_PAGE", 12453))  # Default starting page
 GITHUB_PAT = os.getenv("GITHUB_PAT")
+WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
+WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
 # Logging Configuration
 LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
-# Check GitHub PAT
+# Validate Configurations
+logging.info(f"CLOUDINARY_CLOUD_NAME: {CLOUDINARY_CLOUD_NAME}")
+logging.info(f"CLOUDINARY_API_KEY: {'Set' if CLOUDINARY_API_KEY else 'Not Set'}")
+logging.info(f"CLOUDINARY_API_SECRET: {'Set' if CLOUDINARY_API_SECRET else 'Not Set'}")
+
+if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
+    logging.error("Cloudinary configuration is incomplete. Ensure all Cloudinary credentials are set.")
+    exit(1)
+
 if not GITHUB_PAT:
     logging.error("GITHUB_PAT is not set. Check your environment and GitHub Actions secrets.")
     exit(1)
-else:
-    logging.info(f"GITHUB_PAT is set. Length: {len(GITHUB_PAT)} characters.")
 
-# Git Helper Functions
-def configure_git():
-    try:
-        subprocess.run(["git", "config", "user.name", "MaidoEstate"], check=True)
-        subprocess.run(["git", "config", "user.email", "Alan@real-estate-osaka.com"], check=True)
-        logging.info("Git user identity configured.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to configure Git user identity: {e}")
+if not WEBFLOW_API_TOKEN:
+    logging.error("WEBFLOW_API_TOKEN is not set. Check your environment variables or GitHub Actions secrets.")
+    exit(1)
 
-def pull_latest_changes():
-    try:
-        subprocess.run(["git", "stash"], check=True)  # Stash uncommitted changes
-        subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
-        logging.info("Pulled latest changes from GitHub.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to pull latest changes from GitHub: {e}")
-        exit(1)
+if not WEBFLOW_COLLECTION_ID:
+    logging.error("WEBFLOW_COLLECTION_ID is not set. Ensure you've added the correct collection ID.")
+    exit(1)
 
-def commit_and_push(file_path):
-    try:
-        subprocess.run(["git", "add", file_path], check=True)
-        subprocess.run(["git", "commit", "-m", "Update last_page.txt via script"], check=True)
-        subprocess.run(
-            ["git", "push", f"https://{GITHUB_PAT}@github.com/MaidoEstate/Maido-script.git", "HEAD:main"],
-            check=True,
+# Helper Functions
+def upload_image_to_cloudinary(image_path):
+    """
+    Upload an image to Cloudinary and return its URL.
+    """
+    url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+    with open(image_path, "rb") as image_file:
+        response = requests.post(
+            url, 
+            files={"file": image_file}, 
+            data={"upload_preset": "default"}
         )
-        logging.info(f"Committed and pushed {file_path} to GitHub.")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to commit and push {file_path} to GitHub: {e}")
-        exit(1)
+    if response.status_code == 200:
+        return response.json()["url"]
+    else:
+        logging.error(f"Failed to upload image to Cloudinary: {response.status_code}, {response.text}")
+        return None
 
-# Scraper Functions
+def upload_to_webflow(data):
+    """
+    Upload a single item to the Webflow CMS collection.
+    """
+    headers = {
+        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
+
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        if response.status_code in (200, 201):
+            logging.info(f"Item successfully uploaded to Webflow: {response.json()}")
+        else:
+            logging.error(f"Failed to upload item to Webflow: {response.status_code}, {response.text}")
+    except Exception as e:
+        logging.error(f"Error while uploading item to Webflow: {e}")
+
 def download_image(img_url, folder, image_counter, page_id):
     img_name = os.path.basename(img_url)
     if re.match(r'^\d', img_name):  # Image name starts with a digit
@@ -74,7 +99,7 @@ def download_image(img_url, folder, image_counter, page_id):
                 with open(img_path, "wb") as f:
                     f.write(img_data)
                 logging.info(f"Downloaded image for page {page_id}: {img_url} -> {new_img_name}")
-                return new_img_name
+                return img_path
             except Exception as e:
                 logging.error(f"Failed to download image from page {page_id}: {e}")
         return None
@@ -82,7 +107,10 @@ def download_image(img_url, folder, image_counter, page_id):
         logging.info(f"Image {img_name} skipped as it does not start with a digit.")
         return None
 
-def scrape_page(page_id, output_dir):
+def scrape_page(page_id):
+    """
+    Scrape a single page and upload data to Webflow.
+    """
     url = f"{BASE_URL}{page_id}"
     logging.info(f"Accessing URL: {url}")
     try:
@@ -93,16 +121,14 @@ def scrape_page(page_id, output_dir):
             return False
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
-        page_folder = os.path.join(output_dir, str(page_id))
+        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
         # Extract details and images
         property_data = {
-            "page_id": page_id,
             "title": soup.find("h1").text.strip() if soup.find("h1") else "No title",
             "description": soup.find("div", class_="description").text.strip() if soup.find("div", "description") else "No description",
-            "big_images": [],
-            "small_images": [],
+            "images": [],
         }
 
         image_counter = 1
@@ -111,18 +137,26 @@ def scrape_page(page_id, output_dir):
             if img_url and img_url.startswith("http"):
                 downloaded_image = download_image(img_url, page_folder, image_counter, page_id)
                 if downloaded_image:
-                    if "big" in img_url.lower():
-                        property_data["big_images"].append(downloaded_image)
-                    else:
-                        property_data["small_images"].append(downloaded_image)
+                    uploaded_url = upload_image_to_cloudinary(downloaded_image)
+                    if uploaded_url:
+                        property_data["images"].append(uploaded_url)
                     image_counter += 1
 
-        # Save property details to JSON
-        json_path = os.path.join(page_folder, f"property_{page_id}.json")
-        with open(json_path, "w", encoding="utf-8") as jsonfile:
-            json.dump(property_data, jsonfile, indent=4, ensure_ascii=False)
+        # Prepare Webflow data
+        webflow_data = {
+            "fields": {
+                "name": property_data["title"],
+                "slug": f"property-{page_id}",
+                "description": property_data["description"],
+                "_archived": False,
+                "_draft": False,
+                "images": property_data["images"],
+            }
+        }
 
-        logging.info(f"Page {page_id} scraped successfully.")
+        # Upload to Webflow
+        upload_to_webflow(webflow_data)
+        logging.info(f"Page {page_id} processed and uploaded successfully.")
         return True
 
     except Exception as e:
@@ -131,9 +165,6 @@ def scrape_page(page_id, output_dir):
 
 # Main Function
 def main():
-    pull_latest_changes()  # Ensure we start with the latest GitHub state
-    configure_git()
-
     try:
         with open("last_page.txt", "r") as f:
             current_page = int(f.read().strip()) + 1
@@ -142,19 +173,14 @@ def main():
 
     consecutive_invalid = 0
     while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
-        logging.info(f"Scraping page {current_page}...")
-        success = scrape_page(current_page, OUTPUT_DIR)
+        success = scrape_page(current_page)
         if success:
-            # Update last_page.txt and increment only if successful
             with open("last_page.txt", "w") as f:
                 f.write(str(current_page))
-            commit_and_push("last_page.txt")
             consecutive_invalid = 0
         else:
             consecutive_invalid += 1
             logging.warning(f"Page {current_page} was invalid or redirected.")
-
-        # Move to the next page regardless of success or failure
         current_page += 1
 
 if __name__ == "__main__":
