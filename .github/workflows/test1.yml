@@ -1,4 +1,4 @@
-name: Run Test1 Script, Commit Updates, and Upload to Webflow
+name: Run Test1 Script and Upload to Webflow
 
 on:
   workflow_dispatch:
@@ -18,26 +18,36 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Chromium and Chromedriver
-      - name: Install Chromium and Chromedriver
+      # Step 3: Install Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable chromium-chromedriver
+          sudo apt-get install -y google-chrome-stable xvfb unzip
+          pip install -r requirements.txt
 
-      # Step 4: Verify installation of Chromium and Chromedriver
+      # Step 4: Install and Configure Chromedriver
+      - name: Install Matching Chromedriver
+        run: |
+          CHROME_VERSION=$(google-chrome --version | awk '{print $3}')
+          CHROMEDRIVER_VERSION=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION)
+          wget -N https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip -d /usr/bin/
+          chmod +x /usr/bin/chromedriver
+
+      # Step 5: Start Xvfb
+      - name: Start Xvfb
+        run: Xvfb :99 -ac &
+        env:
+          DISPLAY: ":99"
+
+      # Step 6: Verify Installation
       - name: Verify Installation
         run: |
-          which google-chrome || echo "Google Chrome not found"
-          google-chrome --version || echo "Unable to determine Chrome version"
-          which chromedriver || echo "Chromedriver not found"
-          chromedriver --version || echo "Unable to determine Chromedriver version"
+          google-chrome --version
+          chromedriver --version
 
-      # Step 5: Install dependencies
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
-
-      # Step 6: Run the test1.py script and upload to Webflow
-      - name: Run Test1 Script with Upload
+      # Step 7: Run the Test1 Script
+      - name: Run Test1 Script
         env:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
@@ -45,23 +55,6 @@ jobs:
           GITHUB_PAT: ${{ secrets.PAT }}
           WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
           WEBFLOW_COLLECTION_ID: ${{ secrets.WEBFLOW_COLLECTION_ID }}
-          ACTIONS_STEP_DEBUG: true
+          DISPLAY: ":99"
         run: |
           python test1.py && python upload_to_webflow.py
-
-      # Step 7: Configure Git credentials
-      - name: Configure Git
-        run: |
-          git config user.name "MaidoEstate"
-          git config user.email "Alan@real-estate-osaka.com"
-
-      # Step 8: Commit and push changes to the repository
-      - name: Commit and Push Changes
-        run: |
-          echo "Debug: PAT length is ${#GITHUB_PAT}"
-          git pull --rebase origin main || echo "No remote changes to pull"
-          git add -A  # Add all changes, including untracked files
-          git commit -m "Update last_page.txt and scraped data via script" || echo "No changes to commit"
-          git push "https://${{ secrets.PAT }}@github.com/MaidoEstate/Maido-script.git" HEAD:main
-        env:
-          GITHUB_PAT: ${{ secrets.PAT }}
