@@ -24,21 +24,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb unzip wget
 
-      # Step 4: Install Stable Chrome and Chromedriver
-      - name: Install Stable Chrome and Chromedriver
+      # Step 4: Install Stable Chrome and Matching ChromeDriver
+      - name: Install Stable Chrome and ChromeDriver
         run: |
           set -e
-          # Remove any existing Chrome
-          sudo apt-get remove -y google-chrome-stable || true
-          # Install a stable version of Chrome (adjust version as necessary)
-          wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_116.0.5845.96-1_amd64.deb
-          sudo dpkg -i google-chrome-stable_116.0.5845.96-1_amd64.deb
+          # Install a stable version of Chrome
+          wget -qO- https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb > google-chrome-stable_current_amd64.deb
+          sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -f -y
 
-          # Install matching ChromeDriver
-          CHROME_VERSION="116.0.5845.96"
+          # Get the installed Chrome version
+          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+")
+
+          # Download the matching ChromeDriver version
+          echo "Installed Chrome version: $CHROME_VERSION"
           CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-          wget -N "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
-          unzip chromedriver_linux64.zip -d /usr/bin/
+          echo "Matching ChromeDriver version: $CHROMEDRIVER_VERSION"
+          wget -q "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
+          unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
       # Step 5: Start Xvfb
