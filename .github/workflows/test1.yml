@@ -21,16 +21,34 @@ jobs:
       # Step 3: Install Chrome and Matching ChromeDriver
       - name: Install Latest Chrome and ChromeDriver
         run: |
+          set -e
+          # Update system and install dependencies
           sudo apt-get update
+          sudo apt-get install -y wget unzip curl
+
+          # Add Google Chrome's repository and install Chrome
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
+
+          # Get the installed Chrome version
           CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Installed Chrome version: $CHROME_VERSION"
+
+          # Match the ChromeDriver version dynamically
           CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-          wget -N "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
-          unzip -o chromedriver_linux64.zip -d /usr/bin/
-          chmod +x /usr/bin/chromedriver
+          echo "Matching ChromeDriver version: $CHROMEDRIVER_VERSION"
+
+          # Download and install the matching ChromeDriver
+          if [ -n "$CHROMEDRIVER_VERSION" ]; then
+            wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+            unzip -o chromedriver_linux64.zip -d /usr/bin/
+            chmod +x /usr/bin/chromedriver
+          else
+            echo "ERROR: No matching ChromeDriver found for Chrome version $CHROME_VERSION"
+            exit 1
+          fi
 
       # Step 4: Start Xvfb
       - name: Start Xvfb
