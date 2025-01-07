@@ -18,21 +18,27 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Google Chrome and ChromeDriver
-      - name: Install Chrome and ChromeDriver
+
+      # Install Chrome and ChromeDriver
+      - name: Install Chrome and Matching ChromeDriver
         run: |
-          # Add Chrome repository and install Chrome
+          # Install Chrome (latest stable version)
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-          # Install matching ChromeDriver
+          # Get Chrome version
           CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
+
+          # Download and install the matching ChromeDriver version
           CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-          wget -N "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+          wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
           unzip chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
+
+
+
 
       # Step 4: Set up Xvfb for headless Chrome
       - name: Start Xvfb
