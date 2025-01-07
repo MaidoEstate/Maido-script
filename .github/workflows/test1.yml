@@ -18,37 +18,24 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Chrome and Matching ChromeDriver
-      - name: Install Latest Chrome and ChromeDriver
+      # Step 3: Install Chrome and Specific ChromeDriver
+      - name: Install Chrome and Specific ChromeDriver
         run: |
           set -e
           # Update system and install dependencies
           sudo apt-get update
           sudo apt-get install -y wget unzip curl
 
-          # Add Google Chrome's repository and install Chrome
+          # Add Google Chrome's repository and install a specific Chrome version
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          sudo apt-get install -y google-chrome-stable=113.0.5672.126-1
 
-          # Get the installed Chrome version
-          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
-          echo "Installed Chrome version: $CHROME_VERSION"
-
-          # Match the ChromeDriver version dynamically
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-          echo "Matching ChromeDriver version: $CHROMEDRIVER_VERSION"
-
-          # Download and install the matching ChromeDriver
-          if [ -n "$CHROMEDRIVER_VERSION" ]; then
-            wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
-            unzip -o chromedriver_linux64.zip -d /usr/bin/
-            chmod +x /usr/bin/chromedriver
-          else
-            echo "ERROR: No matching ChromeDriver found for Chrome version $CHROME_VERSION"
-            exit 1
-          fi
+          # Download and install the specific ChromeDriver version
+          wget -q https://chromedriver.storage.googleapis.com/113.0.5672.63/chromedriver_linux64.zip
+          unzip -o chromedriver_linux64.zip -d /usr/bin/
+          chmod +x /usr/bin/chromedriver
 
       # Step 4: Start Xvfb
       - name: Start Xvfb
