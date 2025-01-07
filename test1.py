@@ -1,3 +1,26 @@
+import os
+import time
+import logging
+import json
+import requests
+import re
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
+from datetime import datetime
+import subprocess
+
+# Configuration
+CHROMIUM_DRIVER_PATH = os.getenv("CHROMIUM_DRIVER_PATH", "/usr/bin/chromedriver")
+BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
+START_PAGE = int(os.getenv("START_PAGE", 12453))
+
+# Logging Configuration
+LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+
 def scrape_page(page_id):
     """Scrape a single page and save data locally."""
     url = f"{BASE_URL}{page_id}"
@@ -35,7 +58,7 @@ def scrape_page(page_id):
         image_counter = 1
         for img_tag in soup.find_all("img"):
             img_url = img_tag.get("src")
-            if is_valid_image(img_url):  # Apply filter here
+            if is_valid_image(img_url):
                 img_name = f"Maido_{datetime.now().strftime('%Y%m%d')}_{image_counter}.jpg"
                 img_path = os.path.join(page_folder, img_name)
 
@@ -70,3 +93,17 @@ def scrape_page(page_id):
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
+
+if __name__ == "__main__":
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    service = Service(CHROMIUM_DRIVER_PATH)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    try:
+        scrape_page(START_PAGE)
+        subprocess.run(["python", "upload_to_webflow.py"], check=True)
+    finally:
+        driver.quit()
