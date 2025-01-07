@@ -8,28 +8,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
-      # Step 3: Install Dependencies
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable xvfb unzip
           pip install -r requirements.txt
 
-      # Step 4: Install and Configure Chromedriver
       - name: Install Matching Chromedriver
         run: |
           set -e
-          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+.[0-9]+.[0-9]+")
+          CHROME_VERSION=$(google-chrome --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
           echo "Chrome version: $CHROME_VERSION"
           CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
           echo "ChromeDriver version: $CHROMEDRIVER_VERSION"
@@ -37,19 +33,11 @@ jobs:
           unzip chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
-      # Step 5: Start Xvfb
       - name: Start Xvfb
         run: Xvfb :99 -ac &
         env:
           DISPLAY: ":99"
 
-      # Step 6: Verify Installation
-      - name: Verify Installation
-        run: |
-          google-chrome --version
-          chromedriver --version
-
-      # Step 7: Run the Test1 Script
       - name: Run Test1 Script
         env:
           START_PAGE: 12498
