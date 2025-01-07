@@ -8,43 +8,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the repository
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
+      # Step 3: Install Dependencies
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip xvfb
+          sudo apt-get install -y google-chrome-stable xvfb unzip
+          pip install -r requirements.txt
 
-      - name: Install Chrome & ChromeDriver (Stable)
+      # Step 4: Install and Configure Chromedriver
+      - name: Install Matching Chromedriver
         run: |
-          sudo rm -f /usr/bin/google-chrome
-          wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo dpkg -i /tmp/google-chrome.deb || sudo apt-get -f install -y
-          wget -q -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/$(curl -s https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json | jq -r '.channels.Stable.version')/linux64/chromedriver-linux64.zip
-          sudo unzip /tmp/chromedriver.zip -d /usr/bin/
-          sudo chmod +x /usr/bin/chromedriver
+          set -e
+          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+.[0-9]+.[0-9]+")
+          echo "Chrome version: $CHROME_VERSION"
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+          echo "ChromeDriver version: $CHROMEDRIVER_VERSION"
+          wget -N "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
+          unzip chromedriver_linux64.zip -d /usr/bin/
+          chmod +x /usr/bin/chromedriver
 
-      - name: Start Xvfb (for Selenium)
+      # Step 5: Start Xvfb
+      - name: Start Xvfb
         run: Xvfb :99 -ac &
         env:
           DISPLAY: ":99"
 
+      # Step 6: Verify Installation
       - name: Verify Installation
         run: |
           google-chrome --version
           chromedriver --version
 
-      - name: Install Python Dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Run Test1 Script (Scraper)
+      # Step 7: Run the Test1 Script
+      - name: Run Test1 Script
         env:
           START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
@@ -58,14 +64,3 @@ jobs:
           DISPLAY: ":99"
         run: |
           python test1.py
-
-      - name: Run Upload to Webflow Script
-        env:
-          OUTPUT_DIR: ./scraped_data
-          WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
-          WEBFLOW_COLLECTION_ID: ${{ secrets.WEBFLOW_COLLECTION_ID }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-        run: |
-          python upload_to_webflow.py
