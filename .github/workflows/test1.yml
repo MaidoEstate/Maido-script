@@ -25,14 +25,17 @@ jobs:
           sudo apt-get install -y xvfb unzip wget
 
       # Step 4: Install a Stable Chrome and ChromeDriver Pair
-      - name: Install Chrome and Matching ChromeDriver
-        run: |
-          # Install Chrome (specific stable version)
-          sudo apt-get install -y google-chrome-stable=113.0.5672.126-1
-          
-          # Download ChromeDriver matching the Chrome version
-          wget -q https://chromedriver.storage.googleapis.com/113.0.5672.63/chromedriver_linux64.zip
-          unzip -o chromedriver_linux64.zip -d /usr/bin/
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}" || echo "NOT_FOUND")
+          if [ "$CHROMEDRIVER_VERSION" = "NOT_FOUND" ]; then
+              echo "No matching ChromeDriver version found for Chrome version $CHROME_VERSION"
+              exit 1
+          fi
+          wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+          unzip chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
       # Step 5: Start Xvfb
