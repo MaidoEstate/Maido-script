@@ -19,23 +19,30 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable xvfb unzip
-          pip install -r requirements.txt
+          sudo apt-get install -y wget unzip xvfb
 
-       - name: Install Stable Chrome & ChromeDriver
-  run: |
-    sudo apt-get remove google-chrome-stable -y
-    sudo apt-get install -y wget unzip
-    sudo wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-    sudo dpkg -i /tmp/google-chrome-stable_current_amd64.deb
-    sudo wget -q -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chromedriver-linux64.zip
-    sudo unzip /tmp/chromedriver.zip -d /usr/bin/
-    sudo chmod +x /usr/bin/chromedriver
+      - name: Install Chrome & ChromeDriver
+        run: |
+          sudo apt-get remove google-chrome-stable -y
+          sudo wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo dpkg -i /tmp/google-chrome-stable_current_amd64.deb
+          sudo wget -q -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chromedriver-linux64.zip
+          sudo unzip /tmp/chromedriver.zip -d /usr/bin/
+          sudo chmod +x /usr/bin/chromedriver
 
-      - name: Start Xvfb
+      - name: Start Xvfb (for Selenium)
         run: Xvfb :99 -ac &
         env:
           DISPLAY: ":99"
+
+      - name: Verify Installation
+        run: |
+          google-chrome --version
+          chromedriver --version
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r requirements.txt
 
       - name: Run Test1 Script
         env:
@@ -51,3 +58,14 @@ jobs:
           DISPLAY: ":99"
         run: |
           python test1.py
+
+      - name: Run Upload to Webflow Script
+        env:
+          OUTPUT_DIR: ./scraped_data
+          WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
+          WEBFLOW_COLLECTION_ID: ${{ secrets.WEBFLOW_COLLECTION_ID }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: |
+          python upload_to_webflow.py
