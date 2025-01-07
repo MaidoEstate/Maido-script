@@ -22,32 +22,59 @@ jobs:
       - name: Install Chrome and Specific ChromeDriver
         run: |
           set -e
-          # Update system and install dependencies
+          echo "Updating system and installing dependencies..."
           sudo apt-get update
           sudo apt-get install -y wget unzip curl
 
-          # Add Google Chrome's repository and install a specific Chrome version
+          echo "Adding Google Chrome's repository..."
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
+
+          echo "Installing Google Chrome (specific version)..."
           sudo apt-get install -y google-chrome-stable=113.0.5672.126-1
 
-          # Download and install the specific ChromeDriver version
+          echo "Downloading and installing the specific ChromeDriver version..."
           wget -q https://chromedriver.storage.googleapis.com/113.0.5672.63/chromedriver_linux64.zip
           unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
+          echo "Installed Chrome version:"
+          google-chrome --version
+
+          echo "Installed ChromeDriver version:"
+          chromedriver --version
+
       # Step 4: Start Xvfb
       - name: Start Xvfb
-        run: Xvfb :99 -ac &
+        run: |
+          echo "Starting Xvfb..."
+          Xvfb :99 -ac &
         env:
           DISPLAY: ":99"
 
       # Step 5: Install Python Dependencies
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: |
+          echo "Installing Python dependencies..."
+          pip install -r requirements.txt
 
-      # Step 6: Run the Test Script
+      # Step 6: Debug Environment
+      - name: Debug Environment
+        run: |
+          echo "Checking installed Python version:"
+          python --version
+
+          echo "Checking installed Chrome version:"
+          google-chrome --version
+
+          echo "Checking installed ChromeDriver version:"
+          chromedriver --version
+
+          echo "Checking DISPLAY environment variable:"
+          echo $DISPLAY
+
+      # Step 7: Run the Test Script
       - name: Run Test Script
         env:
           START_PAGE: 12498
@@ -60,4 +87,6 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           DISPLAY: ":99"
-        run: python test1.py
+        run: |
+          echo "Running the scraper script..."
+          python test1.py
