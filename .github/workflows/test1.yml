@@ -12,47 +12,40 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python environment
+      # Step 2: Set up Python Environment
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
-
-      # Install Chrome and ChromeDriver
-      - name: Install Chrome and Matching ChromeDriver
+      # Step 3: Install Chrome and Matching ChromeDriver
+      - name: Install Latest Chrome and ChromeDriver
         run: |
-          # Install Chrome (latest stable version)
+          sudo apt-get update
           wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-
-          # Get Chrome version
-          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-
-          # Download and install the matching ChromeDriver version
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
-          wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
-          unzip chromedriver_linux64.zip -d /usr/bin/
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+          wget -N "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+          unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
-
-
-
-      # Step 4: Set up Xvfb for headless Chrome
+      # Step 4: Start Xvfb
       - name: Start Xvfb
         run: Xvfb :99 -ac &
         env:
           DISPLAY: ":99"
 
-      # Step 5: Install Python dependencies
+      # Step 5: Install Python Dependencies
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      # Step 6: Run the scraper script
-      - name: Run Scraper
+      # Step 6: Run the Test Script
+      - name: Run Test Script
         env:
+          START_PAGE: 12498
           CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
           GITHUB_PAT: ${{ secrets.PAT }}
