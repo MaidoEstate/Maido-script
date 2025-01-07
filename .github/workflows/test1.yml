@@ -22,16 +22,15 @@ jobs:
           sudo apt-get install -y google-chrome-stable xvfb unzip
           pip install -r requirements.txt
 
-      - name: Install Matching Chromedriver
-        run: |
-          set -e
-          CHROME_VERSION=$(google-chrome --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-          echo "Chrome version: $CHROME_VERSION"
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-          echo "ChromeDriver version: $CHROMEDRIVER_VERSION"
-          wget -N "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
-          unzip chromedriver_linux64.zip -d /usr/bin/
-          chmod +x /usr/bin/chromedriver
+       - name: Install Stable Chrome & ChromeDriver
+  run: |
+    sudo apt-get remove google-chrome-stable -y
+    sudo apt-get install -y wget unzip
+    sudo wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    sudo dpkg -i /tmp/google-chrome-stable_current_amd64.deb
+    sudo wget -q -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/latest/linux64/chromedriver-linux64.zip
+    sudo unzip /tmp/chromedriver.zip -d /usr/bin/
+    sudo chmod +x /usr/bin/chromedriver
 
       - name: Start Xvfb
         run: Xvfb :99 -ac &
