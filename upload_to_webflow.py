@@ -18,33 +18,34 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 def upload_image_to_cloudinary(image_path):
     """Upload an image to Cloudinary and return its URL."""
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+
     with open(image_path, "rb") as image_file:
-        response = requests.post(
-            url, files={"file": image_file}, data={"upload_preset": "default"},
-            auth=(CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)
-        )
+        files = {"file": image_file}
+        data = {
+            "api_key": CLOUDINARY_API_KEY,  
+            "timestamp": str(int(time.time())),  
+            "folder": "real_estate",  # Optional: Organize in Cloudinary folders
+        }
+
+        # If using unsigned upload, require an "upload_preset"
+        UPLOAD_PRESET = "default"  # Replace with your actual Cloudinary preset name
+        if UPLOAD_PRESET:
+            data["upload_preset"] = UPLOAD_PRESET
+        else:
+            # If using signed upload, generate a signature
+            import hashlib, hmac
+            sorted_params = "&".join(f"{k}={v}" for k, v in sorted(data.items()))
+            signature = hmac.new(CLOUDINARY_API_SECRET.encode(), sorted_params.encode(), hashlib.sha256).hexdigest()
+            data["signature"] = signature
+            data["api_key"] = CLOUDINARY_API_KEY  
+
+        response = requests.post(url, files=files, data=data)
+
     if response.status_code == 200:
         return response.json()["secure_url"]
     else:
         logging.error(f"Failed to upload image: {response.status_code}, {response.text}")
         return None
-
-def upload_to_webflow(data):
-    """Upload property data to Webflow."""
-    headers = {
-        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
-
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code in (200, 201):
-            logging.info(f"Successfully uploaded: {response.json()}")
-        else:
-            logging.error(f"Upload failed: {response.status_code}, {response.text}")
-    except Exception as e:
-        logging.error(f"Error uploading data to Webflow: {e}")
 
 def process_scraped_data():
     """Process all scraped data and upload it to Webflow."""
