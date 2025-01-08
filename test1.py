@@ -14,23 +14,17 @@ WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET", "unsigned_upload")
 MAX_CONSECUTIVE_INVALID = 10
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
 
 # Validate environment variables
-if not WEBFLOW_API_TOKEN:
-    logging.error("WEBFLOW_API_TOKEN is not set.")
-    exit(1)
-
-if not WEBFLOW_COLLECTION_ID:
-    logging.error("WEBFLOW_COLLECTION_ID is not set.")
-    exit(1)
-
-if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
-    logging.error("Cloudinary configuration is incomplete.")
-    exit(1)
+for env_var in ["WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"]:
+    if not os.getenv(env_var):
+        logging.error(f"{env_var} is not set.")
+        exit(1)
 
 # Cloudinary image upload
 def upload_image_to_cloudinary(image_path):
@@ -39,7 +33,7 @@ def upload_image_to_cloudinary(image_path):
         response = requests.post(
             url,
             files={"file": image_file},
-            data={"upload_preset": "unsigned_upload"}  # Ensure this matches your Cloudinary preset
+            data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
         )
     if response.status_code == 200:
         return response.json()["url"]
@@ -96,18 +90,22 @@ def scrape_page(page_id, playwright):
                     img_file.write(requests.get(img_url).content)
                 cloudinary_url = upload_image_to_cloudinary(image_path)
                 if cloudinary_url:
-                    images.append(cloudinary_url)
+                    images.append({"url": cloudinary_url})
                 image_counter += 1
+            else:
+                logging.debug(f"Skipping non-numeric filename or invalid image URL: {img_url}")
 
         # Prepare data for Webflow
         webflow_data = {
             "fields": {
-                "name": title,  # Maps to "Name"
-                "slug": f"property-{page_id}",  # Maps to "Slug"
-                "description": description,  # Maps to "Description"
+                "name": title,
+                "slug": f"property-{page_id}",
                 "_archived": False,
                 "_draft": False,
-                "multi-image": images,  # Maps to "Multi BIG Image 2"
+                "description": f"<p>{description}</p>",
+                "multi-image": images,
+                "district": "6672b625a00e8f837e7b4e68",  # Example ID for "Naniwa-ku"
+                "category": "665b099bc0ffada56b489baf",  # Example ID for "Rent a Home"
             }
         }
 
