@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Latest Chrome and Matching ChromeDriver
-      - name: Install Chrome and Matching ChromeDriver
+      # Step 3: Install Chrome and Matching ChromeDriver
+      - name: Install Fixed Chrome and ChromeDriver
         run: |
           set -e
           echo "Updating system and installing dependencies..."
@@ -31,21 +31,11 @@ jobs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
 
-          echo "Installing the latest Google Chrome..."
-          sudo apt-get install -y google-chrome-stable
+          echo "Installing specific Google Chrome version (114.0.5735.90)..."
+          sudo apt-get install -y google-chrome-stable=114.0.5735.90-1
 
-          echo "Fetching the installed Chrome version..."
-          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
-
-          echo "Finding the matching ChromeDriver for Chrome version $CHROME_VERSION..."
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-          if [ -z "$CHROMEDRIVER_VERSION" ]; then
-            echo "ERROR: No matching ChromeDriver found for Chrome version $CHROME_VERSION"
-            exit 1
-          fi
-
-          echo "Downloading and installing ChromeDriver version $CHROMEDRIVER_VERSION..."
-          wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+          echo "Downloading and installing the specific ChromeDriver version (114.0.5735.90)..."
+          wget -q "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip"
           unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
