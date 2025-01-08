@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Chrome and Specific ChromeDriver
-      - name: Install Chrome and Specific ChromeDriver
+      # Step 3: Install Latest Chrome and Matching ChromeDriver
+      - name: Install Chrome and ChromeDriver
         run: |
           set -e
           echo "Updating system and installing dependencies..."
@@ -31,18 +31,28 @@ jobs:
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
 
-          echo "Installing Google Chrome (specific version)..."
-          sudo apt-get install -y google-chrome-stable=113.0.5672.126-1
+          echo "Installing the latest stable version of Google Chrome..."
+          sudo apt-get install -y google-chrome-stable
 
-          echo "Downloading and installing the specific ChromeDriver version..."
-          wget -q https://chromedriver.storage.googleapis.com/113.0.5672.63/chromedriver_linux64.zip
+          echo "Fetching the installed Chrome version..."
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Installed Chrome version: $CHROME_VERSION"
+
+          echo "Fetching the matching ChromeDriver version..."
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+          if [ -z "$CHROMEDRIVER_VERSION" ]; then
+            echo "ERROR: No matching ChromeDriver found for Chrome version $CHROME_VERSION"
+            exit 1
+          fi
+          echo "Matching ChromeDriver version: $CHROMEDRIVER_VERSION"
+
+          echo "Downloading and installing ChromeDriver..."
+          wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
           unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
 
-          echo "Installed Chrome version:"
+          echo "Verifying installations..."
           google-chrome --version
-
-          echo "Installed ChromeDriver version:"
           chromedriver --version
 
       # Step 4: Start Xvfb
