@@ -1,42 +1,44 @@
 import os
 import json
-import requests
 import logging
+import requests
 from datetime import datetime
-from playwright.sync_api import sync_playwright
 
 # Configuration
-START_PAGE = int(os.getenv("START_PAGE", 12453))
-BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
 WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
-CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET", "unsigned_upload")
-MAX_CONSECUTIVE_INVALID = 10
+UPLOAD_PRESET = "default"
+BASE_DIRECTORY = os.getenv("OUTPUT_DIR", "./scraped_data")
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
 
 # Validate environment variables
-for env_var in ["WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"]:
-    if not os.getenv(env_var):
-        logging.error(f"{env_var} is not set.")
+required_env_vars = [
+    "WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID",
+    "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"
+]
+for var in required_env_vars:
+    if not os.getenv(var):
+        logging.error(f"Environment variable {var} is not set.")
         exit(1)
 
-# Cloudinary image upload
+# Upload image to Cloudinary
 def upload_image_to_cloudinary(image_path):
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
     with open(image_path, "rb") as image_file:
         response = requests.post(
             url,
             files={"file": image_file},
-            data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
+            data={"upload_preset": UPLOAD_PRESET}
         )
     if response.status_code == 200:
-        return response.json()["url"]
+        cloudinary_url = response.json()["secure_url"]
+        logging.debug(f"Image uploaded to Cloudinary: {cloudinary_url}")
+        return cloudinary_url
     else:
         logging.error(f"Failed to upload image to Cloudinary: {response.status_code}, {response.text}")
         return None
@@ -48,62 +50,53 @@ def upload_to_webflow(data):
         "Content-Type": "application/json",
     }
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
+
+    logging.debug(f"Preparing to upload to Webflow. URL: {url}")
+    logging.debug(f"Headers: {headers}")
+    logging.debug(f"Payload: {json.dumps(data, indent=2)}")
+
     try:
         response = requests.post(url, headers=headers, json=data)
         if response.status_code in (200, 201):
-            logging.info(f"Uploaded item to Webflow: {response.json()}")
+            logging.info(f"Successfully uploaded item to Webflow: {response.json()}")
         else:
-            logging.error(f"Failed to upload item to Webflow: {response.text}")
+            logging.error(f"Failed to upload item to Webflow: {response.status_code} - {response.text}")
     except Exception as e:
-        logging.error(f"Error uploading to Webflow: {e}")
+        logging.error(f"Error during Webflow upload: {e}")
 
-# Scrape a single page
-def scrape_page(page_id, playwright):
-    url = f"{BASE_URL}{page_id}"
-    logging.info(f"Scraping URL: {url}")
-    browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
-    page = context.new_page()
+# Process scraped data
+def process_scraped_data():
+    for page_folder in os.listdir(BASE_DIRECTORY):
+        json_file = os.path.join(BASE_DIRECTORY, page_folder, f"property_{page_folder}.json")
+        if not os.path.exists(json_file):
+            logging.debug(f"Skipping folder without JSON file: {page_folder}")
+            continue
 
-    try:
-        page.goto(url)
-        if page.url == "https://www.designers-osaka-chintai.info/":
-            logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
-            return False
+        with open(json_file, "r", encoding="utf-8") as f:
+            property_data = json.load(f)
 
-        # Extract data
-        title = page.query_selector("h1").inner_text() if page.query_selector("h1") else "No Title"
-        description = page.query_selector(".description").inner_text() if page.query_selector(".description") else "No Description"
+        # Debug logs for each field
+        logging.debug(f"Processing property: {property_data.get('title', 'No Title')}")
+        logging.debug(f"Description length: {len(property_data.get('description', ''))}")
+        logging.debug(f"Number of images: {len(property_data.get('big_images', []))}")
 
-        # Create output folder
-        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
-        os.makedirs(page_folder, exist_ok=True)
-
-        # Download and upload images
-        images = []
-        image_counter = 1
-        for img in page.query_selector_all("img"):
-            img_url = img.get_attribute("src")
-            if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():  # Only images starting with a digit
-                image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{image_counter}.jpg")
-                with open(image_path, "wb") as img_file:
-                    img_file.write(requests.get(img_url).content)
-                cloudinary_url = upload_image_to_cloudinary(image_path)
-                if cloudinary_url:
-                    images.append({"url": cloudinary_url})
-                image_counter += 1
-            else:
-                logging.debug(f"Skipping non-numeric filename or invalid image URL: {img_url}")
+        # Upload images to Cloudinary
+        hosted_images = [
+            upload_image_to_cloudinary(os.path.join(BASE_DIRECTORY, page_folder, img))
+            for img in property_data.get("big_images", [])
+            if img.split("/")[-1][0].isdigit()  # Only process images starting with a digit
+        ]
+        hosted_images = [url for url in hosted_images if url]  # Filter out failed uploads
 
         # Prepare data for Webflow
         webflow_data = {
             "fields": {
-                "name": title,
-                "slug": f"property-{page_id}",
+                "name": property_data.get("title", "No Title"),
+                "slug": f"property-{property_data.get('page_id', 'no-id')}",
                 "_archived": False,
                 "_draft": False,
-                "description": f"<p>{description}</p>",
-                "multi-image": images,
+                "description": f"<p>{property_data.get('description', 'No Description')}</p>",
+                "multi-image": [{"url": url} for url in hosted_images],
                 "district": "6672b625a00e8f837e7b4e68",  # Example ID for "Naniwa-ku"
                 "category": "665b099bc0ffada56b489baf",  # Example ID for "Rent a Home"
             }
@@ -111,36 +104,6 @@ def scrape_page(page_id, playwright):
 
         # Upload to Webflow
         upload_to_webflow(webflow_data)
-        logging.info(f"Page {page_id} scraped and uploaded successfully.")
-        return True
-
-    except Exception as e:
-        logging.error(f"Error scraping page {page_id}: {e}")
-        return False
-
-    finally:
-        browser.close()
-
-# Main function
-def main():
-    try:
-        with open("last_page.txt", "r") as f:
-            current_page = int(f.read().strip()) + 1
-    except FileNotFoundError:
-        current_page = START_PAGE
-
-    consecutive_invalid = 0
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    with sync_playwright() as playwright:
-        while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
-            if scrape_page(current_page, playwright):
-                with open("last_page.txt", "w") as f:
-                    f.write(str(current_page))
-                consecutive_invalid = 0
-            else:
-                consecutive_invalid += 1
-            current_page += 1
 
 if __name__ == "__main__":
-    main()
+    process_scraped_data()
