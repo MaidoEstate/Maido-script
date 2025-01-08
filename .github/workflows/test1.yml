@@ -19,7 +19,7 @@ jobs:
           python-version: 3.11
 
       # Step 3: Install Chrome and Matching ChromeDriver
-      - name: Install Chrome and ChromeDriver
+      - name: Install Latest Chrome and ChromeDriver
         run: |
           set -e
           echo "Updating system and installing dependencies..."
@@ -27,25 +27,25 @@ jobs:
           sudo apt-get install -y wget unzip curl
 
           echo "Adding Google Chrome's repository..."
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
 
-          echo "Installing the latest stable version of Google Chrome..."
+          echo "Installing Google Chrome (latest version)..."
           sudo apt-get install -y google-chrome-stable
 
           echo "Getting installed Chrome version..."
           CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
 
-          echo "Fetching matching ChromeDriver version..."
+          echo "Fetching matching ChromeDriver version for Chrome $CHROME_VERSION..."
           CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
-
+          
           if [ -z "$CHROMEDRIVER_VERSION" ]; then
-            echo "ERROR: Could not find matching ChromeDriver for Chrome version $CHROME_VERSION"
+            echo "ERROR: No matching ChromeDriver version found for Chrome version $CHROME_VERSION"
             exit 1
           fi
 
-          echo "Downloading and installing ChromeDriver version $CHROMEDRIVER_VERSION..."
+          echo "Downloading and installing ChromeDriver $CHROMEDRIVER_VERSION..."
           wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
           unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
