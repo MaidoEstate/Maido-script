@@ -39,7 +39,7 @@ def upload_image_to_cloudinary(image_path):
         response = requests.post(
             url,
             files={"file": image_file},
-            data={"upload_preset": "unsigned_upload"}  # Match this name to your preset
+            data={"upload_preset": "unsigned_upload"}  # Ensure this matches your Cloudinary preset
         )
     if response.status_code == 200:
         return response.json()["url"]
@@ -85,12 +85,12 @@ def scrape_page(page_id, playwright):
         page_folder = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
-        # Download and upload valid images
+        # Download and upload images
         images = []
         image_counter = 1
         for img in page.query_selector_all("img"):
             img_url = img.get_attribute("src")
-            if img_url and img_url.startswith("http") and os.path.basename(img_url)[0].isdigit():
+            if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():  # Only images starting with a digit
                 image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{image_counter}.jpg")
                 with open(image_path, "wb") as img_file:
                     img_file.write(requests.get(img_url).content)
@@ -102,12 +102,12 @@ def scrape_page(page_id, playwright):
         # Prepare data for Webflow
         webflow_data = {
             "fields": {
-                "name": title,
-                "slug": f"property-{page_id}",
-                "description": description,
+                "name": title,  # Maps to "Name"
+                "slug": f"property-{page_id}",  # Maps to "Slug"
+                "description": description,  # Maps to "Description"
                 "_archived": False,
                 "_draft": False,
-                "images": images,
+                "multi-image": images,  # Maps to "Multi BIG Image 2"
             }
         }
 
