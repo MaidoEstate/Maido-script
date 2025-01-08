@@ -85,13 +85,13 @@ def scrape_page(page_id, playwright):
         page_folder = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
-        # Download and upload images
+        # Download and upload valid images
         images = []
         image_counter = 1
         for img in page.query_selector_all("img"):
             img_url = img.get_attribute("src")
-            if img_url and img_url.startswith("http"):
-                image_path = os.path.join(page_folder, f"image_{image_counter}.jpg")
+            if img_url and img_url.startswith("http") and os.path.basename(img_url)[0].isdigit():
+                image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{image_counter}.jpg")
                 with open(image_path, "wb") as img_file:
                     img_file.write(requests.get(img_url).content)
                 cloudinary_url = upload_image_to_cloudinary(image_path)
