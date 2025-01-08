@@ -36,7 +36,7 @@ jobs:
           OUTPUT_DIR: ./scraped_data
           GITHUB_PAT: ${{ secrets.PAT }}
           WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
-          WEBFLOW_COLLECTION_ID: ${{ secrets.WEBFLOW_COLLECTION_ID }}
+          WEBFLOW_COLLECTION_ID: "665b06933a06a0a4893b7af2"
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
