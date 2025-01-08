@@ -35,21 +35,16 @@ if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
 # Cloudinary image upload
 def upload_image_to_cloudinary(image_path):
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
-    try:
-        with open(image_path, "rb") as image_file:
-            response = requests.post(
-                url,
-                files={"file": image_file},
-                data={"upload_preset": "default"}
-            )
-        if response.status_code == 200:
-            logging.info(f"Uploaded image {image_path} to Cloudinary.")
-            return response.json()["url"]
-        else:
-            logging.error(f"Failed to upload image {image_path}: {response.text}")
-            return None
-    except Exception as e:
-        logging.error(f"Error uploading image to Cloudinary: {e}")
+    with open(image_path, "rb") as image_file:
+        response = requests.post(
+            url,
+            files={"file": image_file},
+            data={"upload_preset": "unsigned_upload"}  # Match this name to your preset
+        )
+    if response.status_code == 200:
+        return response.json()["url"]
+    else:
+        logging.error(f"Failed to upload image to Cloudinary: {response.status_code}, {response.text}")
         return None
 
 # Upload data to Webflow
