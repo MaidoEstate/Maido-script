@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: 3.11
 
-      # Step 3: Install Latest Chrome and ChromeDriver
-      - name: Install Latest Chrome and ChromeDriver
+      # Step 3: Install Chrome and ChromeDriver
+      - name: Install Chrome and ChromeDriver
         run: |
           set -e
           echo "Updating system and installing dependencies..."
@@ -36,22 +36,20 @@ jobs:
 
           echo "Fetching installed Chrome version..."
           CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Installed Chrome version: $CHROME_VERSION"
 
           echo "Finding the matching ChromeDriver for Chrome version $CHROME_VERSION..."
           CHROMEDRIVER_VERSION=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION)
 
           if [ -z "$CHROMEDRIVER_VERSION" ]; then
-            echo "ERROR: No matching ChromeDriver version found for Chrome $CHROME_VERSION"
-            exit 1
+            echo "No exact ChromeDriver version found for Chrome $CHROME_VERSION. Falling back to latest stable version..."
+            CHROMEDRIVER_VERSION=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
           fi
 
           echo "Downloading and installing ChromeDriver version $CHROMEDRIVER_VERSION..."
           wget -q https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip
           unzip -o chromedriver_linux64.zip -d /usr/bin/
           chmod +x /usr/bin/chromedriver
-
-          echo "Installed Chrome version:"
-          google-chrome --version
 
           echo "Installed ChromeDriver version:"
           chromedriver --version
