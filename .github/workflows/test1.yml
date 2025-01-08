@@ -8,77 +8,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
+      # Step 1: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python Environment
+      # Step 2: Set Up Python Environment
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
-      # Step 3: Install Chrome and Matching ChromeDriver
-      - name: Install Fixed Chrome and ChromeDriver
+      # Step 3: Install Playwright and Dependencies
+      - name: Install Playwright and Dependencies
         run: |
-          set -e
-          echo "Updating system and installing dependencies..."
-          sudo apt-get update
-          sudo apt-get install -y wget unzip curl
+          pip install playwright
+          playwright install
 
-          echo "Adding Google Chrome's repository..."
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-
-          echo "Installing specific Google Chrome version (114.0.5735.90)..."
-          sudo apt-get install -y google-chrome-stable=114.0.5735.90-1
-
-          echo "Downloading and installing the specific ChromeDriver version (114.0.5735.90)..."
-          wget -q "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip"
-          unzip -o chromedriver_linux64.zip -d /usr/bin/
-          chmod +x /usr/bin/chromedriver
-
-          echo "Installed Chrome version:"
-          google-chrome --version
-
-          echo "Installed ChromeDriver version:"
-          chromedriver --version
-
-      # Step 4: Start Xvfb
-      - name: Start Xvfb
-        run: |
-          echo "Starting Xvfb..."
-          Xvfb :99 -ac &
-        env:
-          DISPLAY: ":99"
-
-      # Step 5: Install Python Dependencies
+      # Step 4: Install Python Dependencies
       - name: Install Dependencies
         run: |
-          echo "Installing Python dependencies..."
           pip install -r requirements.txt
 
-      # Step 6: Debug Environment
-      - name: Debug Environment
-        run: |
-          echo "Checking installed Python version:"
-          python --version
-
-          echo "Checking installed Chrome version:"
-          google-chrome --version
-
-          echo "Checking installed ChromeDriver version:"
-          chromedriver --version
-
-          echo "Checking DISPLAY environment variable:"
-          echo $DISPLAY
-
-      # Step 7: Run the Test Script
+      # Step 5: Run the Test Script
       - name: Run Test Script
         env:
           START_PAGE: 12498
-          CHROMIUM_DRIVER_PATH: /usr/bin/chromedriver
           OUTPUT_DIR: ./scraped_data
           GITHUB_PAT: ${{ secrets.PAT }}
           WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
@@ -86,7 +40,6 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-          DISPLAY: ":99"
         run: |
-          echo "Running the scraper script..."
+          echo "Running the scraper script with Playwright..."
           python test1.py
