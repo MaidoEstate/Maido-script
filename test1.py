@@ -17,7 +17,7 @@ CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET", "unsigned_upload")
 MAX_CONSECUTIVE_INVALID = 10
-UPLOAD_PRESET = "default"
+UPLOAD_PRESET = "unsigned_upload"
 BASE_DIRECTORY = os.getenv("OUTPUT_DIR", "./scraped_data")
 
 # Logging setup
