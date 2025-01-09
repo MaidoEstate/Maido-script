@@ -38,15 +38,22 @@ for var in required_env_vars:
 
 # Cloudinary image upload
 # Upload image to Cloudinary
+# Cloudinary image upload
 def upload_image_to_cloudinary(image_path):
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
     with open(image_path, "rb") as image_file:
         response = requests.post(
             url,
             files={"file": image_file},
-            data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
-            data={"upload_preset": UPLOAD_PRESET}
+            data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}  # Fix: Removed duplicate `data` argument
         )
+    if response.status_code == 200:
+        cloudinary_url = response.json()["secure_url"]
+        logging.debug(f"Image uploaded to Cloudinary: {cloudinary_url}")
+        return cloudinary_url
+    else:
+        logging.error(f"Failed to upload image to Cloudinary: {response.status_code} - {response.text}")
+        return None
     if response.status_code == 200:
         return response.json()["url"]
         cloudinary_url = response.json()["secure_url"]
