@@ -29,6 +29,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+- name: Debug Environment Variables
+        run: env | sort
+
       # Step 5: Run the Test Script
       - name: Run Test Script
         env:
