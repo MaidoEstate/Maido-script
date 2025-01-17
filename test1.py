@@ -49,21 +49,36 @@ def upload_image_to_cloudinary(image_path):
     logging.error("Cloudinary upload failed after 3 attempts.")
     return None
 
-# Upload data to Webflow (v2 API)
+# Upload data to Webflow with validation and debugging
 def upload_to_webflow(data):
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Content-Type": "application/json",
     }
-    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"  # v2 endpoint
+    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
 
-    # Wrap the data in 'fieldData' as required by v2
+    # Prepare payload for v2
     payload = {
-        "fieldData": data["fields"],
+        "fieldData": {
+            "name": data["fields"].get("name", "Default Name"),
+            "slug": data["fields"].get("slug", f"default-slug-{int(datetime.now().timestamp())}"),
+            "_archived": False,
+            "_draft": False,
+        }
     }
 
+    # Add optional fields if present
+    if "description" in data["fields"]:
+        payload["fieldData"]["description"] = data["fields"]["description"]
+    if "multi-image" in data["fields"] and len(data["fields"]["multi-image"]) > 0:
+        payload["fieldData"]["multi-image"] = data["fields"]["multi-image"][:25]  # Limit to 25 images
+    if "district" in data["fields"]:
+        payload["fieldData"]["district"] = data["fields"]["district"]
+    if "category" in data["fields"]:
+        payload["fieldData"]["category"] = data["fields"]["category"]
+
     try:
-        logging.debug(f"Uploading to Webflow (v2): {json.dumps(payload, indent=2)}")
+        logging.debug(f"Uploading to Webflow: {json.dumps(payload, indent=2)}")
         response = requests.post(url, headers=headers, json=payload)
         logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
         if response.status_code in (200, 201):
@@ -95,7 +110,7 @@ def scrape_page(page_id, playwright):
             if extracted_title != "大阪デザイナーズマンション専門サイト キワミ":
                 title = extracted_title
                 break
-        
+
         if not title:
             title = "No Title"
         logging.info(f"Title for page {page_id}: {title}")
