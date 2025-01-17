@@ -81,8 +81,20 @@ def scrape_page(page_id, playwright):
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract data
-        title = page.query_selector("h1").inner_text() if page.query_selector("h1") else "No Title"
+        # Extract title and exclude undesired ones
+        title = None
+        h1_elements = page.query_selector_all("h1")
+        for h1 in h1_elements:
+            extracted_title = h1.inner_text()
+            if extracted_title != "大阪デザイナーズマンション専門サイト キワミ":
+                title = extracted_title
+                break
+        
+        if not title:
+            title = "No Title"
+        logging.info(f"Title for page {page_id}: {title}")
+
+        # Extract description
         description = page.query_selector(".description").inner_text() if page.query_selector(".description") else "No Description"
 
         # Create output folder
