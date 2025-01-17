@@ -49,16 +49,22 @@ def upload_image_to_cloudinary(image_path):
     logging.error("Cloudinary upload failed after 3 attempts.")
     return None
 
-# Upload data to Webflow
+# Upload data to Webflow (v2 API)
 def upload_to_webflow(data):
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Content-Type": "application/json",
     }
-    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"  # v2 endpoint
+
+    # Wrap the data in 'fieldData' as required by v2
+    payload = {
+        "fieldData": data["fields"],
+    }
+
     try:
-        logging.debug(f"Uploading to Webflow: {json.dumps(data, indent=2)}")
-        response = requests.post(url, headers=headers, json=data)
+        logging.debug(f"Uploading to Webflow (v2): {json.dumps(payload, indent=2)}")
+        response = requests.post(url, headers=headers, json=payload)
         logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
         if response.status_code in (200, 201):
             logging.info(f"Uploaded item to Webflow successfully.")
