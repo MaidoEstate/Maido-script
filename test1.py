@@ -28,27 +28,25 @@ for var in REQUIRED_ENV_VARS:
         logging.error(f"Environment variable {var} is not set.")
         exit(1)
 
-# Cloudinary image upload
+# Cloudinary image upload with retry logic
 def upload_image_to_cloudinary(image_path):
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
-    try:
-        with open(image_path, "rb") as image_file:
-            response = requests.post(
-                url,
-                files={"file": image_file},
-                data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
-            )
-        if response.status_code == 200:
-            cloudinary_url = response.json().get("secure_url")
-            if cloudinary_url:
+    for attempt in range(3):
+        try:
+            with open(image_path, "rb") as image_file:
+                response = requests.post(
+                    url,
+                    files={"file": image_file},
+                    data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
+                )
+            if response.status_code == 200:
+                cloudinary_url = response.json().get("secure_url")
                 logging.debug(f"Image uploaded to Cloudinary: {cloudinary_url}")
                 return cloudinary_url
-            else:
-                logging.error("Cloudinary response did not contain a secure URL.")
-        else:
-            logging.error(f"Failed to upload image to Cloudinary: {response.status_code} - {response.text}")
-    except Exception as e:
-        logging.error(f"Error uploading to Cloudinary: {e}")
+            logging.error(f"Cloudinary upload failed: {response.status_code} - {response.text}")
+        except Exception as e:
+            logging.warning(f"Retry {attempt + 1}/3 for Cloudinary upload: {e}")
+    logging.error("Cloudinary upload failed after 3 attempts.")
     return None
 
 # Upload data to Webflow
@@ -58,14 +56,14 @@ def upload_to_webflow(data):
         "Content-Type": "application/json",
     }
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
-    logging.debug(f"Preparing to upload to Webflow. URL: {url}")
-    logging.debug(f"Payload: {json.dumps(data, indent=2)}")
     try:
+        logging.debug(f"Uploading to Webflow: {json.dumps(data, indent=2)}")
         response = requests.post(url, headers=headers, json=data)
+        logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
         if response.status_code in (200, 201):
-            logging.info(f"Successfully uploaded item to Webflow: {response.json()}")
+            logging.info(f"Uploaded item to Webflow successfully.")
         else:
-            logging.error(f"Failed to upload item to Webflow: {response.status_code} - {response.text}")
+            logging.error(f"Webflow upload failed: {response.status_code} - {response.text}")
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
@@ -93,31 +91,30 @@ def scrape_page(page_id, playwright):
 
         # Download and upload images
         images = []
-        image_counter = 1
         for img in page.query_selector_all("img"):
             img_url = img.get_attribute("src")
-            if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():  # Only numeric filenames
-                image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{image_counter}.jpg")
+            if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():
+                image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images) + 1}.jpg")
                 with open(image_path, "wb") as img_file:
                     img_file.write(requests.get(img_url).content)
                 cloudinary_url = upload_image_to_cloudinary(image_path)
                 if cloudinary_url:
                     images.append({"url": cloudinary_url})
-                image_counter += 1
-            else:
-                logging.debug(f"Skipping non-numeric filename or invalid image URL: {img_url}")
+
+        # Limit to 25 images for Webflow
+        images = images[:25]
 
         # Prepare data for Webflow
         webflow_data = {
             "fields": {
                 "name": title,
-                "slug": f"property-{page_id}",
+                "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
                 "_archived": False,
                 "_draft": False,
                 "description": f"<p>{description}</p>",
                 "multi-image": images,
-                "district": "6672b625a00e8f837e7b4e68",  # Example ID for "Naniwa-ku"
-                "category": "665b099bc0ffada56b489baf",  # Example ID for "Rent a Home"
+                "district": "6672b625a00e8f837e7b4e68",  # Verify this ID
+                "category": "665b099bc0ffada56b489baf",  # Verify this ID
             }
         }
 
