@@ -49,7 +49,7 @@ def upload_image_to_cloudinary(image_path):
     logging.error("Cloudinary upload failed after 3 attempts.")
     return None
 
-# Upload data to Webflow with validation and debugging
+# Upload data to Webflow
 def upload_to_webflow(data):
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
@@ -61,16 +61,14 @@ def upload_to_webflow(data):
     payload = {
         "items": [
             {
-                "fieldData": {
-                    "name": data["fields"].get("name", "Default Name"),
-                    "slug": data["fields"].get("slug", f"default-slug-{int(datetime.now().timestamp())}"),
-                    "_archived": False,
-                    "_draft": False,
-                    "description": data["fields"].get("description", "<p>No Description</p>"),
-                    "multi-image": data["fields"].get("multi-image", [])[:25],  # Limit to 25 images
-                    "district": data["fields"].get("district"),
-                    "category": data["fields"].get("category"),
-                }
+                "name": data["fields"].get("name", "Default Name"),
+                "slug": data["fields"].get("slug", f"default-slug-{int(datetime.now().timestamp())}"),
+                "_archived": False,
+                "_draft": False,
+                "description": data["fields"].get("description", "<p>No Description</p>"),
+                "multi-image": data["fields"].get("multi-image", [])[:25],  # Limit to 25 images
+                "district": data["fields"].get("district"),
+                "category": data["fields"].get("category"),
             }
         ]
     }
@@ -132,9 +130,6 @@ def scrape_page(page_id, playwright):
                 if cloudinary_url:
                     images.append({"url": cloudinary_url})
 
-        # Limit to 25 images for Webflow
-        images = images[:25]
-
         # Prepare data for Webflow
         webflow_data = {
             "fields": {
@@ -143,9 +138,9 @@ def scrape_page(page_id, playwright):
                 "_archived": False,
                 "_draft": False,
                 "description": f"<p>{description}</p>",
-                "multi-image": images,
-                "district": "6672b625a00e8f837e7b4e68",  # Verify this ID
-                "category": "665b099bc0ffada56b489baf",  # Verify this ID
+                "multi-image": images[:25],  # Limit to 25 images
+                "district": "6672b625a00e8f837e7b4e68",  # Adjust this ID
+                "category": "665b099bc0ffada56b489baf",  # Adjust this ID
             }
         }
 
