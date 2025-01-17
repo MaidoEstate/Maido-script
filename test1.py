@@ -67,8 +67,8 @@ def upload_to_webflow(data):
                 "_draft": False,
                 "description": data["fields"].get("description", "<p>No Description</p>"),
                 "multi-image": data["fields"].get("multi-image", [])[:25],  # Limit to 25 images
-                "district": data["fields"].get("district"),
-                "category": data["fields"].get("category"),
+               "district": "6672b625a00e8f837e7b4e68",  # Fixed district ID
+            "category": "665b099bc0ffada56b489baf",  # Fixed category ID
             }
         ]
     }
