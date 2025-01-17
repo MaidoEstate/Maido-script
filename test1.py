@@ -55,7 +55,7 @@ def upload_to_webflow(data):
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Content-Type": "application/json",
     }
-    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
     try:
         logging.debug(f"Uploading to Webflow: {json.dumps(data, indent=2)}")
         response = requests.post(url, headers=headers, json=data)
