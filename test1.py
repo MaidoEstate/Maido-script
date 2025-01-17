@@ -59,23 +59,21 @@ def upload_to_webflow(data):
 
     # Prepare payload for v2
     payload = {
-        "fieldData": {
-            "name": data["fields"].get("name", "Default Name"),
-            "slug": data["fields"].get("slug", f"default-slug-{int(datetime.now().timestamp())}"),
-            "_archived": False,
-            "_draft": False,
-        }
+        "items": [
+            {
+                "fieldData": {
+                    "name": data["fields"].get("name", "Default Name"),
+                    "slug": data["fields"].get("slug", f"default-slug-{int(datetime.now().timestamp())}"),
+                    "_archived": False,
+                    "_draft": False,
+                    "description": data["fields"].get("description", "<p>No Description</p>"),
+                    "multi-image": data["fields"].get("multi-image", [])[:25],  # Limit to 25 images
+                    "district": data["fields"].get("district"),
+                    "category": data["fields"].get("category"),
+                }
+            }
+        ]
     }
-
-    # Add optional fields if present
-    if "description" in data["fields"]:
-        payload["fieldData"]["description"] = data["fields"]["description"]
-    if "multi-image" in data["fields"] and len(data["fields"]["multi-image"]) > 0:
-        payload["fieldData"]["multi-image"] = data["fields"]["multi-image"][:25]  # Limit to 25 images
-    if "district" in data["fields"]:
-        payload["fieldData"]["district"] = data["fields"]["district"]
-    if "category" in data["fields"]:
-        payload["fieldData"]["category"] = data["fields"]["category"]
 
     try:
         logging.debug(f"Uploading to Webflow: {json.dumps(payload, indent=2)}")
