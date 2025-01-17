@@ -46,12 +46,13 @@ jobs:
       - name: Validate Environment Variables in Python
         run: |
           echo "Running Python environment variable check..."
-          python - <<EOF
+          echo "
 import os
 print('CLOUDINARY_UPLOAD_PRESET:', os.getenv('CLOUDINARY_UPLOAD_PRESET'))
 print('CLOUDINARY_CLOUD_NAME:', os.getenv('CLOUDINARY_CLOUD_NAME'))
 print('WEBFLOW_API_TOKEN:', os.getenv('WEBFLOW_API_TOKEN'))
-EOF
+          " > validate_env.py
+          python validate_env.py
 
       # Step 8: Run the Test Script
       - name: Run Test Script
