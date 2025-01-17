@@ -2,38 +2,21 @@ import os
 import json
 import logging
 import requests
-from datetime import datetime
-from playwright.sync_api import sync_playwright
 
 # Configuration
-START_PAGE = int(os.getenv("START_PAGE", 12453))
-BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
 WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
-CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
-CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
-CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
-CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET", "unsigned_upload")
-MAX_CONSECUTIVE_INVALID = 10
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
 
-# Cloudinary image upload
-def upload_image_to_cloudinary(image_path):
-    url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
-    with open(image_path, "rb") as image_file:
-        response = requests.post(
-            url,
-            files={"file": image_file},
-            data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
-        )
-    if response.status_code == 200:
-        return response.json()["url"]
-    else:
-        logging.error(f"Failed to upload image to Cloudinary: {response.status_code}, {response.text}")
-        return None
+# Validate Environment Variables
+def validate_env_vars():
+    required_env_vars = ["WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID"]
+    for var in required_env_vars:
+        if not os.getenv(var):
+            logging.error(f"Environment variable {var} is not set.")
+            exit(1)
 
 # Upload data to Webflow
 def upload_to_webflow(data):
@@ -47,94 +30,37 @@ def upload_to_webflow(data):
         if response.status_code in (200, 201):
             logging.info(f"Uploaded item to Webflow: {response.json()}")
         else:
-            logging.error(f"Failed to upload item to Webflow: {response.text}")
+            logging.error(f"Failed to upload item to Webflow: {response.status_code}, {response.text}")
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
-# Log field data for debugging
-def log_field_data(data):
-    logging.info("Field Data Summary:")
-    for key, value in data.items():
-        if isinstance(value, list):
-            logging.info(f"{key}: {len(value)} items")
-            for idx, item in enumerate(value, start=1):
-                logging.debug(f"  [{idx}] {item}")
-        else:
-            logging.info(f"{key}: {value}")
+# Prepare Data and Upload to Webflow
+def main():
+    validate_env_vars()
 
-# Scrape a single page
-def scrape_page(page_id, playwright):
-    url = f"{BASE_URL}{page_id}"
-    logging.info(f"Scraping URL: {url}")
-    browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
-    page = context.new_page()
-
-    try:
-        page.goto(url)
-        if page.url == "https://www.designers-osaka-chintai.info/":
-            logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
-            return False
-
-        # Extract data
-        title = page.query_selector("h1").inner_text() if page.query_selector("h1") else "No Title"
-        description = page.query_selector(".description").inner_text() if page.query_selector(".description") else "No Description"
-
-        # Collect images
-        images = []
-        for img in page.query_selector_all("img"):
-            img_url = img.get_attribute("src")
-            if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():
-                images.append(img_url)
-
-        # Prepare data
-        scraped_data = {
-            "name": title,
-            "slug": f"property-{page_id}",
-            "description": description,
-            "multi-image": images,
+    # Example data to upload
+    data = {
+        "fields": {
+            "name": "Sample Property",
+            "slug": "sample-property",
+            "_archived": False,
+            "_draft": False,
+            "description": "<p>This is a sample property description.</p>",
+            "multi-image": [
+                {"url": "https://example.com/image1.jpg"},
+                {"url": "https://example.com/image2.jpg"}
+            ],
             "district": "6672b625a00e8f837e7b4e68",  # Example district ID
             "category": "665b099bc0ffada56b489baf",  # Example category ID
         }
+    }
 
-        # Log field data
-        log_field_data(scraped_data)
-
-        # Upload to Webflow
-        webflow_data = {
-            "fields": scraped_data
-        }
-        upload_to_webflow(webflow_data)
-        logging.info(f"Page {page_id} scraped and uploaded successfully.")
-        return True
-
-    except Exception as e:
-        logging.error(f"Error scraping page {page_id}: {e}")
-        return False
-
-    finally:
-        browser.close()
-
-# Main function
-def main():
-    try:
-        with open("last_page.txt", "r") as f:
-            current_page = int(f.read().strip()) + 1
-    except FileNotFoundError:
-        current_page = START_PAGE
-
-    consecutive_invalid = 0
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    with sync_playwright() as playwright:
-        while consecutive_invalid < MAX_CONSECUTIVE_INVALID:
-            if scrape_page(current_page, playwright):
-                with open("last_page.txt", "w") as f:
-                    f.write(str(current_page))
-                consecutive_invalid = 0
-            else:
-                consecutive_invalid += 1
-            current_page += 1
+    # Log data
+    logging.info("Preparing to upload the following data to Webflow:")
+    logging.info(json.dumps(data, indent=2))
+    
+    # Upload to Webflow
+    upload_to_webflow(data)
 
 if __name__ == "__main__":
     main()
