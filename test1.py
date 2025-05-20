@@ -15,7 +15,6 @@ CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
 DEFAULT_TITLE_KEYWORD = "大阪デザイナーズマンション専門サイト"
-EXPECTED_HEADERS = {"種別", "所在地", "構造", "駐車場"}
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -48,7 +47,7 @@ def upload_to_webflow(data):
     try:
         logging.debug(f"Uploading to Webflow: {json.dumps(payload, indent=2)}")
         res = requests.post(url, headers=headers, json=payload)
-        if res.status_code in (200,201):
+        if res.status_code in (200, 201):
             logging.info("Uploaded item to Webflow successfully.")
         else:
             logging.error(f"Webflow upload failed: {res.status_code} - {res.text}")
@@ -79,56 +78,55 @@ def scrape_page(page_id, playwright):
             logging.warning(f"Page {page_id} missing valid title. Skipping.")
             return False
 
-        # Grab all tables and validate structure
-        tables = page.query_selector_all("table")
-        if len(tables) < 2:
-            logging.warning(f"Page {page_id} has <2 tables ({len(tables)}). Skipping.")
-            return False
-        # Validate first table headers
-        header_cells = [th.inner_text().strip() for th in tables[0].query_selector_all("tr:nth-of-type(1) th")]
-        if not EXPECTED_HEADERS.issubset(set(header_cells)):
-            logging.warning(f"Page {page_id} unexpected table headers: {header_cells}. Skipping.")
-            return False
-
         # Extract description
-        desc = page.query_selector(".description")
-        description = desc.inner_text().strip() if desc else ""
+        desc_el = page.query_selector(".description")
+        description = desc_el.inner_text().strip() if desc_el else ""
+
+        # Select tables based on headings
+        prop_table = page.query_selector("h2:has-text('物件情報') + table")
+        room_table = page.query_selector("h2:has-text('部屋情報') + table")
+        if not prop_table or not room_table:
+            logging.warning(f"Page {page_id} missing expected tables. Skipping.")
+            return False
 
         # Parse property info
-        prop = tables[0]
-        vals1 = [td.inner_text().strip() for td in prop.query_selector_all("tr:nth-of-type(2) td")]
-        struct = vals1[2].splitlines() if len(vals1)>=3 else []
+        vals1 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(2) td")]
+        struct = vals1[2].splitlines() if len(vals1) >= 3 else []
         property_info = {
-            "property_type": vals1[0] if len(vals1)>0 else "",
-            "location": vals1[1] if len(vals1)>1 else "",
+            "property_type": vals1[0] if len(vals1) > 0 else "",
+            "location": vals1[1] if len(vals1) > 1 else "",
             "structure": struct[0] if struct else "",
-            "floors": struct[1] if len(struct)>1 else "",
-            "parking": vals1[3] if len(vals1)>3 else ""
+            "floors": struct[1] if len(struct) > 1 else "",
+            "parking": vals1[3] if len(vals1) > 3 else ""
         }
-        vals2 = [td.inner_text().strip() for td in prop.query_selector_all("tr:nth-of-type(4) td")]
-        if len(vals2)>=4:
+        vals2 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(4) td")]
+        if len(vals2) >= 4:
             property_info.update({
                 "layout": vals2[0],
                 "elevator": vals2[1],
                 "completion_date": vals2[2],
                 "units": vals2[3].split()
             })
-        eq = prop.query_selector("tr:has-text('物件設備') td")
-        property_info["property_equipment"] = eq.inner_text().split() if eq else []
-        tr_el = prop.query_selector("tr:has-text('交通') td")
-        property_info["transportation"] = tr_el.inner_text().strip() if tr_el else ""
+        eq_el = prop_table.query_selector("tr:has-text('物件設備') td")
+        property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
+        trans_el = prop_table.query_selector("tr:has-text('交通') td")
+        property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
 
         # Parse room info
-        room = tables[1]
-        r1 = [td.inner_text().strip() for td in room.query_selector_all("tr:nth-of-type(2) td")]
+        r1 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(2) td")]
         room_info = {}
-        if len(r1)>=4:
+        if len(r1) >= 4:
             room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
-        r2 = [td.inner_text().strip() for td in room.query_selector_all("tr:nth-of-type(4) td")]
-        if len(r2)>=4:
-            room_info.update({"water_fee": r2[0], "common_service_fee": r2[1], "year_built": r2[2], "balcony_direction": r2[3]})
-        rq = room.query_selector("tr:has-text('部屋設備') td")
-        room_info["room_equipment"] = rq.inner_text().split() if rq else []
+        r2 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(4) td")]
+        if len(r2) >= 4:
+            room_info.update({
+                "water_fee": r2[0],
+                "common_service_fee": r2[1],
+                "year_built": r2[2],
+                "balcony_direction": r2[3]
+            })
+        re_el = room_table.query_selector("tr:has-text('部屋設備') td")
+        room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
 
         # Download & upload images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -136,24 +134,32 @@ def scrape_page(page_id, playwright):
         os.makedirs(folder, exist_ok=True)
         images = []
         for img in page.query_selector_all("img"):
-            src = img.get_attribute("src")
-            fname = src.split('/')[-1] if src else ''
-            if src and src.startswith("http") and fname and fname[0].isdigit():
+            src = img.get_attribute("src") or ""
+            fname = src.split('/')[-1]
+            if src.startswith("http") and fname and fname[0].isdigit():
                 path = os.path.join(folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
                 with open(path, 'wb') as f:
                     f.write(requests.get(src).content)
-                cloud = upload_image_to_cloudinary(path)
-                if cloud:
-                    images.append({"url": cloud})
+                cloud_url = upload_image_to_cloudinary(path)
+                if cloud_url:
+                    images.append({"url": cloud_url})
 
         # Build & upload payload
-        fields = {"name": title, "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
-                  "_archived": False, "_draft": False, "description": f"<p>{description}</p>",
-                  "multi-image": images, "district": "6672b625a00e8f837e7b4e68", "category": "665b099bc0ffada56b489baf"}
+        fields = {
+            "name": title,
+            "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
+            "_archived": False,
+            "_draft": False,
+            "description": f"<p>{description}</p>",
+            "multi-image": images,
+            "district": "6672b625a00e8f837e7b4e68",
+            "category": "665b099bc0ffada56b489baf"
+        }
         fields.update(property_info)
         fields.update(room_info)
         upload_to_webflow({"fields": fields})
         return True
+
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
