@@ -14,7 +14,6 @@ WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
-DEFAULT_TITLE_KEYWORD = "大阪デザイナーズマンション専門サイト"
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -43,7 +42,7 @@ def upload_image_to_cloudinary(image_path):
 def upload_to_webflow(data):
     headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json"}
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [{ **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] }]}
+    payload = {"items": [ { **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] } ] }
     try:
         logging.debug(f"Uploading to Webflow: {json.dumps(payload, indent=2)}")
         res = requests.post(url, headers=headers, json=payload)
@@ -54,7 +53,7 @@ def upload_to_webflow(data):
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
-# Scrape a single page
+
 def scrape_page(page_id, playwright):
     url = f"{BASE_URL}{page_id}"
     logging.info(f"Scraping URL: {url}")
@@ -62,21 +61,13 @@ def scrape_page(page_id, playwright):
     page = browser.new_context().new_page()
     try:
         page.goto(url)
-        # Skip pages that redirect to homepage
+        # Log homepage redirect but do not skip
         if page.url.rstrip('/') == "https://www.designers-osaka-chintai.info":
-            logging.warning(f"Page {page_id} redirected to homepage, no data to extract.")
-            return False
+            logging.warning(f"Page {page_id} redirected to homepage, extracting what's available.")
 
-        # Extract title
-        title = None
-        for h1 in page.query_selector_all("h1"):
-            text = h1.inner_text().strip()
-            if DEFAULT_TITLE_KEYWORD not in text:
-                title = text
-                break
-        if not title:
-            logging.warning(f"Page {page_id} missing valid title, skipping.")
-            return False
+        # Extract title (take first H1 regardless)
+        title_el = page.query_selector("h1")
+        title = title_el.inner_text().strip() if title_el else f"Property {page_id}"
 
         # Extract description
         desc_el = page.query_selector(".description")
@@ -86,22 +77,20 @@ def scrape_page(page_id, playwright):
         property_info = {}
         room_info = {}
 
-        # Loop through all tables to pick out property and room data
+        # Loop through any tables on page
         for tbl in page.query_selector_all("table"):
-            header_cells = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
-            # Property info
-            if "種別" in header_cells:
-                # Row 2: 種別, 所在地, 構造＋階数, 駐車場
+            headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+
+            if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                struct_parts = vals1[2].splitlines() if len(vals1) > 2 else [""]
-                property_info.update({
+                struct = vals1[2].splitlines() if len(vals1) > 2 else [""]
+                property_info = {
                     "property_type": vals1[0] if len(vals1) > 0 else "",
                     "location": vals1[1] if len(vals1) > 1 else "",
-                    "structure": struct_parts[0],
-                    "floors": struct_parts[1] if len(struct_parts) > 1 else "",
+                    "structure": struct[0],
+                    "floors": struct[1] if len(struct) > 1 else "",
                     "parking": vals1[3] if len(vals1) > 3 else ""
-                })
-                # Row 4: タイプ, エレベーター, 完成, 戸数
+                }
                 vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals2) >= 4:
                     property_info.update({
@@ -110,22 +99,20 @@ def scrape_page(page_id, playwright):
                         "completion_date": vals2[2],
                         "units": vals2[3].split()
                     })
-                # Equipment and transportation
-                eq_el = tbl.query_selector("tr:has-text('物件設備') td")
-                property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
-                trans_el = tbl.query_selector("tr:has-text('交通') td")
-                property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
+                eq = tbl.query_selector("tr:has-text('物件設備') td")
+                property_info["property_equipment"] = eq.inner_text().split() if eq else []
+                trans = tbl.query_selector("tr:has-text('交通') td")
+                property_info["transportation"] = trans.inner_text().strip() if trans else ""
 
-            # Room info
-            if "家賃" in header_cells:
+            if "家賃" in headers:
                 vals_r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 if len(vals_r1) >= 4:
-                    room_info.update({
+                    room_info = {
                         "rent": vals_r1[0],
                         "area": vals_r1[1],
                         "deposit": vals_r1[2],
                         "key_money": vals_r1[3]
-                    })
+                    }
                 vals_r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals_r2) >= 4:
                     room_info.update({
@@ -134,26 +121,26 @@ def scrape_page(page_id, playwright):
                         "year_built": vals_r2[2],
                         "balcony_direction": vals_r2[3]
                     })
-                re_el = tbl.query_selector("tr:has-text('部屋設備') td")
-                room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
+                re = tbl.query_selector("tr:has-text('部屋設備') td")
+                room_info["room_equipment"] = re.inner_text().split() if re else []
 
-        # Download & upload images
+        # Download and upload images (including even if no tables)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
-        os.makedirs(page_folder, exist_ok=True)
+        page_dir = os.path.join(OUTPUT_DIR, str(page_id))
+        os.makedirs(page_dir, exist_ok=True)
         images = []
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
-            fname = src.split('/')[-1]
-            if src.startswith("http") and fname and fname[0].isdigit():
-                local_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
-                with open(local_path, 'wb') as f:
+            name = src.split('/')[-1]
+            if src.startswith("http") and name and name[0].isdigit():
+                local = os.path.join(page_dir, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
+                with open(local, 'wb') as f:
                     f.write(requests.get(src).content)
-                uploaded = upload_image_to_cloudinary(local_path)
-                if uploaded:
-                    images.append({"url": uploaded})
+                cloud_url = upload_image_to_cloudinary(local)
+                if cloud_url:
+                    images.append({"url": cloud_url})
 
-        # Build Webflow fields
+        # Merge all fields
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
@@ -164,13 +151,11 @@ def scrape_page(page_id, playwright):
             "district": "6672b625a00e8f837e7b4e68",
             "category": "665b099bc0ffada56b489baf"
         }
-        # Merge whatever info was found
         fields.update(property_info)
         fields.update(room_info)
 
-        # Upload
         upload_to_webflow({"fields": fields})
-        logging.info(f"Page {page_id} processed successfully.")
+        logging.info(f"Page {page_id} processed.")
         return True
 
     except Exception as e:
@@ -187,13 +172,13 @@ if __name__ == "__main__":
             current = int(f.read().strip()) + 1
     except FileNotFoundError:
         current = START_PAGE
-    invalid_count = 0
+    invalid = 0
     with sync_playwright() as pw:
-        while invalid_count < MAX_CONSECUTIVE_INVALID:
+        while invalid < MAX_CONSECUTIVE_INVALID:
             if scrape_page(current, pw):
                 with open("last_page.txt", "w") as f:
                     f.write(str(current))
-                invalid_count = 0
+                invalid = 0
             else:
-                invalid_count += 1
+                invalid += 1
             current += 1
