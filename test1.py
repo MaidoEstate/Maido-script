@@ -44,7 +44,7 @@ def upload_image_to_cloudinary(image_path, page_id):
 def upload_to_webflow(data):
     headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json; charset=utf-8"}
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [{ **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] }]}
+    payload = {"items": [ { **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] } ] }
     payload_str = json.dumps(payload, ensure_ascii=False)
     try:
         logging.debug(f"Uploading to Webflow payload: {payload_str}")
@@ -70,7 +70,7 @@ def scrape_page(page_id, playwright):
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract title
+        # Extract title (first H1)
         title_el = page.query_selector("h1")
         title = title_el.inner_text().strip() if title_el and title_el.inner_text().strip() else f"Property {page_id}"
 
@@ -82,9 +82,10 @@ def scrape_page(page_id, playwright):
         property_info = {}
         room_info = {}
 
-        # Parse tables
+        # Parse all tables (物件情報 and 部屋情報)
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+            # Property info table
             if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 struct = vals1[2].splitlines() if len(vals1) > 2 else [""]
@@ -107,17 +108,18 @@ def scrape_page(page_id, playwright):
                 property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
                 tr_el = tbl.query_selector("tr:has-text('交通') td")
                 property_info["transportation"] = tr_el.inner_text().strip() if tr_el else ""
+            # Room info table
             if "家賃" in headers:
-                vals_r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                if len(vals_r1) >= 4:
-                    room_info = {"rent": vals_r1[0], "area": vals_r1[1], "deposit": vals_r1[2], "key_money": vals_r1[3]}
-                vals_r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
-                if len(vals_r2) >= 4:
+                r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                if len(r1) >= 4:
+                    room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
+                r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                if len(r2) >= 4:
                     room_info.update({
-                        "water_fee": vals_r2[0],
-                        "common_service_fee": vals_r2[1],
-                        "year_built": vals_r2[2],
-                        "balcony_direction": vals_r2[3]
+                        "water_fee": r2[0],
+                        "common_service_fee": r2[1],
+                        "year_built": r2[2],
+                        "balcony_direction": r2[3]
                     })
                 re_el = tbl.query_selector("tr:has-text('部屋設備') td")
                 room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
@@ -130,6 +132,7 @@ def scrape_page(page_id, playwright):
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
             fname = src.split('/')[-1]
+            # only upload if filename starts with digit
             if not fname or not fname[0].isdigit():
                 continue
             local_path = os.path.join(page_dir, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
@@ -139,7 +142,7 @@ def scrape_page(page_id, playwright):
             if cloud_url:
                 images.append({"url": cloud_url})
 
-        # Build payload
+        # Build payload and upload
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
@@ -152,7 +155,6 @@ def scrape_page(page_id, playwright):
         }
         fields.update(property_info)
         fields.update(room_info)
-
         upload_to_webflow({"fields": fields})
         logging.info(f"Page {page_id} scraped and uploaded successfully.")
         return True
