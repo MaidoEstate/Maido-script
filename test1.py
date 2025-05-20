@@ -14,7 +14,6 @@ WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
-DEFAULT_TITLE_KEYWORD = "大阪デザイナーズマンション専門サイト"
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -31,7 +30,11 @@ def upload_image_to_cloudinary(image_path):
     for attempt in range(3):
         try:
             with open(image_path, "rb") as image_file:
-                resp = requests.post(url, files={"file": image_file}, data={"upload_preset": CLOUDINARY_UPLOAD_PRESET})
+                resp = requests.post(
+                    url,
+                    files={"file": image_file},
+                    data={"upload_preset": CLOUDINARY_UPLOAD_PRESET}
+                )
             if resp.status_code == 200:
                 return resp.json().get("secure_url")
             logging.error(f"Cloudinary upload failed: {resp.status_code} - {resp.text}")
@@ -39,18 +42,26 @@ def upload_image_to_cloudinary(image_path):
             logging.warning(f"Retry {attempt+1}/3 for Cloudinary upload failed: {e}")
     return None
 
-# Upload data to Webflow
+# Upload data to Webflow with proper Unicode handling
 def upload_to_webflow(data):
-    headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
+        "Content-Type": "application/json; charset=utf-8",
+    }
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [ { **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] } ] }
+
+    # Serialize with ensure_ascii=False to keep Japanese characters
+    payload = {"items": [{ **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] }]}
+    payload_str = json.dumps(payload, ensure_ascii=False)
     try:
-        logging.debug(f"Uploading to Webflow: {json.dumps(payload, indent=2)}")
-        res = requests.post(url, headers=headers, json=payload)
-        if res.status_code in (200, 201):
+        logging.debug(f"Uploading to Webflow payload: {payload_str}")
+        # Send raw body to preserve characters
+        response = requests.post(url, headers=headers, data=payload_str.encode('utf-8'))
+        logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
+        if response.status_code in (200, 201):
             logging.info("Uploaded item to Webflow successfully.")
         else:
-            logging.error(f"Webflow upload failed: {res.status_code} - {res.text}")
+            logging.error(f"Webflow upload failed: {response.status_code} - {response.text}")
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
@@ -62,34 +73,20 @@ def scrape_page(page_id, playwright):
     page = browser.new_context().new_page()
     try:
         page.goto(url)
-        # Skip pages that redirect to homepage
-        if page.url.rstrip('/') == "https://www.designers-osaka-chintai.info":
-            logging.warning(f"Page {page_id} redirected to homepage, no data to extract.")
-            return False
-
         # Extract title
-        title = None
-        for h1 in page.query_selector_all("h1"):
-            text = h1.inner_text().strip()
-            if DEFAULT_TITLE_KEYWORD not in text:
-                title = text
-                break
-        if not title:
-            logging.warning(f"Page {page_id} missing valid title, skipping.")
-            return False
-
+        title_el = page.query_selector("h1")
+        title = title_el.inner_text().strip() if title_el else f"Property-{page_id}"
         # Extract description
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
 
-        # Initialize info dicts
+        # Prepare field containers
         property_info = {}
         room_info = {}
 
-        # Loop through any tables on page
+        # Find and parse tables
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
-
             if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 struct = vals1[2].splitlines() if len(vals1) > 2 else [""]
@@ -110,46 +107,40 @@ def scrape_page(page_id, playwright):
                     })
                 eq = tbl.query_selector("tr:has-text('物件設備') td")
                 property_info["property_equipment"] = eq.inner_text().split() if eq else []
-                trans = tbl.query_selector("tr:has-text('交通') td")
-                property_info["transportation"] = trans.inner_text().strip() if trans else ""
-
+                tr = tbl.query_selector("tr:has-text('交通') td")
+                property_info["transportation"] = tr.inner_text().strip() if tr else ""
             if "家賃" in headers:
-                vals_r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                if len(vals_r1) >= 4:
-                    room_info = {
-                        "rent": vals_r1[0],
-                        "area": vals_r1[1],
-                        "deposit": vals_r1[2],
-                        "key_money": vals_r1[3]
-                    }
-                vals_r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
-                if len(vals_r2) >= 4:
+                r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                if len(r1) >= 4:
+                    room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
+                r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                if len(r2) >= 4:
                     room_info.update({
-                        "water_fee": vals_r2[0],
-                        "common_service_fee": vals_r2[1],
-                        "year_built": vals_r2[2],
-                        "balcony_direction": vals_r2[3]
+                        "water_fee": r2[0],
+                        "common_service_fee": r2[1],
+                        "year_built": r2[2],
+                        "balcony_direction": r2[3]
                     })
                 re = tbl.query_selector("tr:has-text('部屋設備') td")
                 room_info["room_equipment"] = re.inner_text().split() if re else []
 
-        # Download & upload images
+        # Images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
-        os.makedirs(page_folder, exist_ok=True)
+        dir_path = os.path.join(OUTPUT_DIR, str(page_id))
+        os.makedirs(dir_path, exist_ok=True)
         images = []
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
             fname = src.split('/')[-1]
             if src.startswith("http") and fname and fname[0].isdigit():
-                local_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
-                with open(local_path, 'wb') as f:
+                local = os.path.join(dir_path, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
+                with open(local, 'wb') as f:
                     f.write(requests.get(src).content)
-                uploaded = upload_image_to_cloudinary(local_path)
-                if uploaded:
-                    images.append({"url": uploaded})
+                url = upload_image_to_cloudinary(local)
+                if url:
+                    images.append({"url": url})
 
-        # Build Webflow fields
+        # Build and upload
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
@@ -162,19 +153,15 @@ def scrape_page(page_id, playwright):
         }
         fields.update(property_info)
         fields.update(room_info)
-
         upload_to_webflow({"fields": fields})
         logging.info(f"Page {page_id} processed.")
         return True
-
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
-
     finally:
         browser.close()
 
-# Main loop
 if __name__ == "__main__":
     try:
         with open("last_page.txt") as f:
