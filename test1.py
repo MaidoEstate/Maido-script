@@ -64,7 +64,7 @@ def scrape_page(page_id, playwright):
         page.goto(url)
         # Skip redirect to homepage
         if page.url.rstrip('/') == "https://www.designers-osaka-chintai.info":
-            logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
+            logging.warning(f"Page {page_id} redirected to homepage.")
             return False
 
         # Extract title
@@ -75,65 +75,62 @@ def scrape_page(page_id, playwright):
                 title = text
                 break
         if not title:
-            logging.warning(f"Page {page_id} missing valid title. Skipping.")
+            logging.warning(f"Page {page_id} missing valid title.")
             return False
 
         # Extract description
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
 
-        # Identify tables by header text
+        # Attempt to identify tables by header text; extract if present
+        property_info = {}
+        room_info = {}
         tables = page.query_selector_all("table")
-        prop_table = None
-        room_table = None
         for tbl in tables:
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+            # Property info table
             if "種別" in headers:
-                prop_table = tbl
-            elif "家賃" in headers:
-                room_table = tbl
-        if not prop_table or not room_table:
-            logging.warning(f"Page {page_id} missing expected tables. Skipping.")
-            return False
-
-        # Parse property info
-        vals1 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(2) td")]
-        struct = vals1[2].splitlines() if len(vals1) >= 3 else []
-        property_info = {
-            "property_type": vals1[0] if len(vals1) > 0 else "",
-            "location": vals1[1] if len(vals1) > 1 else "",
-            "structure": struct[0] if struct else "",
-            "floors": struct[1] if len(struct) > 1 else "",
-            "parking": vals1[3] if len(vals1) > 3 else ""
-        }
-        vals2 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(4) td")]
-        if len(vals2) >= 4:
-            property_info.update({
-                "layout": vals2[0],
-                "elevator": vals2[1],
-                "completion_date": vals2[2],
-                "units": vals2[3].split()
-            })
-        eq_el = prop_table.query_selector("tr:has-text('物件設備') td")
-        property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
-        trans_el = prop_table.query_selector("tr:has-text('交通') td")
-        property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
-
-        # Parse room info
-        r1 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(2) td")]
-        room_info = {}
-        if len(r1) >= 4:
-            room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
-        r2 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(4) td")]
-        if len(r2) >= 4:
-            room_info.update({
-                "water_fee": r2[0],
-                "common_service_fee": r2[1],
-                "year_built": r2[2],
-                "balcony_direction": r2[3]
-            })
-        re_el = room_table.query_selector("tr:has-text('部屋設備') td")
-        room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
+                vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                struct = vals1[2].splitlines() if len(vals1) >= 3 else []
+                property_info.update({
+                    "property_type": vals1[0] if len(vals1) > 0 else "",
+                    "location": vals1[1] if len(vals1) > 1 else "",
+                    "structure": struct[0] if struct else "",
+                    "floors": struct[1] if len(struct) > 1 else "",
+                    "parking": vals1[3] if len(vals1) > 3 else ""
+                })
+                vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                if len(vals2) >= 4:
+                    property_info.update({
+                        "layout": vals2[0],
+                        "elevator": vals2[1],
+                        "completion_date": vals2[2],
+                        "units": vals2[3].split()
+                    })
+                eq_el = tbl.query_selector("tr:has-text('物件設備') td")
+                property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
+                trans_el = tbl.query_selector("tr:has-text('交通') td")
+                property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
+            # Room info table
+            if "家賃" in headers:
+                r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                if len(r1) >= 4:
+                    room_info.update({
+                        "rent": r1[0],
+                        "area": r1[1],
+                        "deposit": r1[2],
+                        "key_money": r1[3]
+                    })
+                r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                if len(r2) >= 4:
+                    room_info.update({
+                        "water_fee": r2[0],
+                        "common_service_fee": r2[1],
+                        "year_built": r2[2],
+                        "balcony_direction": r2[3]
+                    })
+                re_el = tbl.query_selector("tr:has-text('部屋設備') td")
+                room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
 
         # Download & upload images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
