@@ -57,7 +57,6 @@ def upload_to_webflow(data):
     }
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
 
-    # Prepare payload for v2
     payload = {
         "items": [
             {
@@ -66,9 +65,9 @@ def upload_to_webflow(data):
                 "_archived": False,
                 "_draft": False,
                 "description": data["fields"].get("description", "<p>No Description</p>"),
-                "multi-image": data["fields"].get("multi-image", [])[:25],  # Limit to 25 images
-               "district": "6672b625a00e8f837e7b4e68",  # Fixed district ID
-            "category": "665b099bc0ffada56b489baf",  # Fixed category ID
+                "multi-image": data["fields"].get("multi-image", [])[:25],
+                "district": data["fields"].get("district"),
+                "category": data["fields"].get("category"),
             }
         ]
     }
@@ -78,7 +77,7 @@ def upload_to_webflow(data):
         response = requests.post(url, headers=headers, json=payload)
         logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
         if response.status_code in (200, 201):
-            logging.info(f"Uploaded item to Webflow successfully.")
+            logging.info("Uploaded item to Webflow successfully.")
         else:
             logging.error(f"Webflow upload failed: {response.status_code} - {response.text}")
     except Exception as e:
@@ -94,43 +93,100 @@ def scrape_page(page_id, playwright):
 
     try:
         page.goto(url)
+        # Skip if redirected to homepage
         if page.url == "https://www.designers-osaka-chintai.info/":
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract title and exclude undesired ones
+        # Extract title
         title = None
-        h1_elements = page.query_selector_all("h1")
-        for h1 in h1_elements:
-            extracted_title = h1.inner_text()
-            if extracted_title != "大阪デザイナーズマンション専門サイト キワミ":
-                title = extracted_title
+        for h1 in page.query_selector_all("h1"):
+            text = h1.inner_text().strip()
+            if text != "大阪デザイナーズマンション専門サイト キワミ":
+                title = text
                 break
-
         if not title:
             title = "No Title"
         logging.info(f"Title for page {page_id}: {title}")
 
         # Extract description
-        description = page.query_selector(".description").inner_text() if page.query_selector(".description") else "No Description"
+        desc_el = page.query_selector(".description")
+        description = desc_el.inner_text().strip() if desc_el else "No Description"
 
-        # Create output folder
+        # Extract property info (first table)
+        tables = page.query_selector_all("table")
+        property_info = {}
+        if len(tables) >= 1:
+            prop_table = tables[0]
+            # First value row
+            vals1 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(2) td")]
+            # Structure and floors are split by newline
+            struct_lines = vals1[2].splitlines()
+            property_info.update({
+                "property_type": vals1[0],
+                "location": vals1[1],
+                "structure": struct_lines[0] if struct_lines else "",
+                "floors": struct_lines[1] if len(struct_lines) > 1 else "",
+                "parking": vals1[3]
+            })
+            # Second value row
+            vals2 = [td.inner_text().strip() for td in prop_table.query_selector_all("tr:nth-of-type(4) td")]
+            property_info.update({
+                "layout": vals2[0],
+                "elevator": vals2[1],
+                "completion_date": vals2[2],
+                "units": vals2[3].split()
+            })
+            # Equipment list
+            eq_el = prop_table.query_selector("tr:has-text('物件設備') td")
+            equipment = eq_el.inner_text().strip().split() if eq_el else []
+            property_info["property_equipment"] = equipment
+            # Transportation
+            trans_el = prop_table.query_selector("tr:has-text('交通') td")
+            property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
+
+        # Extract room info (second table)
+        room_info = {}
+        if len(tables) >= 2:
+            room_table = tables[1]
+            # Rent, area, deposit, key money
+            vals_r1 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(2) td")]
+            room_info.update({
+                "rent": vals_r1[0],
+                "area": vals_r1[1],
+                "deposit": vals_r1[2],
+                "key_money": vals_r1[3]
+            })
+            # Water, common fee, built, balcony direction
+            vals_r2 = [td.inner_text().strip() for td in room_table.query_selector_all("tr:nth-of-type(4) td")]
+            room_info.update({
+                "water_fee": vals_r2[0],
+                "common_service_fee": vals_r2[1],
+                "year_built": vals_r2[2],
+                "balcony_direction": vals_r2[3]
+            })
+            # Room equipment
+            room_eq_el = room_table.query_selector("tr:has-text('部屋設備') td")
+            room_equips = room_eq_el.inner_text().strip().split() if room_eq_el else []
+            room_info["room_equipment"] = room_equips
+
+        # Create output folder and download/upload images
         page_folder = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_folder, exist_ok=True)
 
-        # Download and upload images
         images = []
         for img in page.query_selector_all("img"):
             img_url = img.get_attribute("src")
             if img_url and img_url.startswith("http") and img_url.split("/")[-1][0].isdigit():
-                image_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images) + 1}.jpg")
-                with open(image_path, "wb") as img_file:
-                    img_file.write(requests.get(img_url).content)
-                cloudinary_url = upload_image_to_cloudinary(image_path)
-                if cloudinary_url:
-                    images.append({"url": cloudinary_url})
+                img_name = f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg"
+                image_path = os.path.join(page_folder, img_name)
+                with open(image_path, "wb") as f:
+                    f.write(requests.get(img_url).content)
+                cloud_url = upload_image_to_cloudinary(image_path)
+                if cloud_url:
+                    images.append({"url": cloud_url})
 
-        # Prepare data for Webflow
+        # Prepare Webflow payload
         webflow_data = {
             "fields": {
                 "name": title,
@@ -138,11 +194,14 @@ def scrape_page(page_id, playwright):
                 "_archived": False,
                 "_draft": False,
                 "description": f"<p>{description}</p>",
-                "multi-image": images[:25],  # Limit to 25 images
-                "district": "6672b625a00e8f837e7b4e68",  # Adjust this ID
-                "category": "665b099bc0ffada56b489baf",  # Adjust this ID
+                "multi-image": images[:25],
+                "district": "6672b625a00e8f837e7b4e68",
+                "category": "665b099bc0ffada56b489baf",
             }
         }
+        # Merge info
+        webflow_data["fields"].update(property_info)
+        webflow_data["fields"].update(room_info)
 
         # Upload to Webflow
         upload_to_webflow(webflow_data)
@@ -157,7 +216,7 @@ def scrape_page(page_id, playwright):
         browser.close()
 
 # Main function
-def main():
+if __name__ == "__main__":
     try:
         with open("last_page.txt", "r") as f:
             current_page = int(f.read().strip()) + 1
@@ -176,6 +235,3 @@ def main():
             else:
                 consecutive_invalid += 1
             current_page += 1
-
-if __name__ == "__main__":
-    main()
