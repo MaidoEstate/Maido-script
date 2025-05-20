@@ -44,14 +44,14 @@ def upload_image_to_cloudinary(image_path, page_id):
 def upload_to_webflow(data):
     headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json; charset=utf-8"}
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [ { **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] } ] }
+    payload = {"items": [{ **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] }]}
     payload_str = json.dumps(payload, ensure_ascii=False)
     try:
-        logging.debug(f"Uploading to Webflow payload: {payload_str}")
+        logging.debug(f"Uploading payload: {payload_str}")
         response = requests.post(url, headers=headers, data=payload_str.encode('utf-8'))
         logging.debug(f"Webflow Response: {response.status_code} - {response.text}")
         if response.status_code in (200, 201):
-            logging.info("Uploaded item to Webflow successfully.")
+            logging.info("Uploaded to Webflow successfully.")
         else:
             logging.error(f"Webflow upload failed: {response.status_code} - {response.text}")
     except Exception as e:
@@ -73,23 +73,19 @@ def scrape_page(page_id, playwright):
         # Extract title
         title_el = page.query_selector("h1")
         title = title_el.inner_text().strip() if title_el and title_el.inner_text().strip() else f"Property {page_id}"
-        logging.debug(f"Title extracted: {title}")
+        logging.debug(f"Title: {title}")
 
         # Extract description
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
-        logging.debug(f"Description extracted: {description}")
+        logging.debug(f"Description: {description}")
 
-        # Prepare field containers
+        # Parse tables
         property_info = {}
         room_info = {}
-
-        # Parse all tables (物件情報 and 部屋情報)
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
             logging.debug(f"Table headers: {headers}")
-
-            # Property info table
             if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 struct = vals1[2].splitlines() if len(vals1) > 2 else [""]
@@ -101,7 +97,6 @@ def scrape_page(page_id, playwright):
                     "parking": vals1[3] if len(vals1) > 3 else ""
                 }
                 logging.debug(f"Property vals1: {vals1}")
-                logging.debug(f"Parsed property_info: {property_info}")
                 vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals2) >= 4:
                     property_info.update({
@@ -111,13 +106,11 @@ def scrape_page(page_id, playwright):
                         "units": vals2[3].split()
                     })
                     logging.debug(f"Property vals2: {vals2}")
-                eq_el = tbl.query_selector("tr:has-text('物件設備') td")
-                property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
+                eq = tbl.query_selector("tr:has-text('物件設備') td")
+                property_info["property_equipment"] = eq.inner_text().split() if eq else []
                 tr_el = tbl.query_selector("tr:has-text('交通') td")
                 property_info["transportation"] = tr_el.inner_text().strip() if tr_el else ""
                 logging.debug(f"Final property_info: {property_info}")
-
-            # Room info table
             if "家賃" in headers:
                 r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 logging.debug(f"Room vals_r1: {r1}")
@@ -136,7 +129,12 @@ def scrape_page(page_id, playwright):
                 room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
                 logging.debug(f"Parsed room_info: {room_info}")
 
-        # Download and upload images: only filenames starting with a digit
+        # Extract Google Maps link
+        map_el = page.query_selector("a:has-text('大きな地図で見る')")
+        map_link = map_el.get_attribute("href") if map_el else ""
+        logging.debug(f"Map link: {map_link}")
+
+        # Download and upload images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         page_dir = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_dir, exist_ok=True)
@@ -162,10 +160,11 @@ def scrape_page(page_id, playwright):
             "_draft": False,
             "description": f"<p>{description}</p>",
             "multi-image": images,
+            "map_link": map_link,
             "district": "6672b625a00e8f837e7b4e68",
             "category": "665b099bc0ffada56b489baf"
         }
-        logging.debug(f"Final merged fields for Webflow: {{**fields, **property_info, **room_info}}")
+        logging.debug(f"Merged fields before Webflow: {{**fields, **property_info, **room_info}}")
         fields.update(property_info)
         fields.update(room_info)
         upload_to_webflow({"fields": fields})
