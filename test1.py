@@ -62,9 +62,9 @@ def scrape_page(page_id, playwright):
     page = browser.new_context().new_page()
     try:
         page.goto(url)
-        # Skip redirect to homepage
+        # Skip pages that redirect to homepage
         if page.url.rstrip('/') == "https://www.designers-osaka-chintai.info":
-            logging.warning(f"Page {page_id} redirected to homepage.")
+            logging.warning(f"Page {page_id} redirected to homepage, no data to extract.")
             return False
 
         # Extract title
@@ -75,30 +75,33 @@ def scrape_page(page_id, playwright):
                 title = text
                 break
         if not title:
-            logging.warning(f"Page {page_id} missing valid title.")
+            logging.warning(f"Page {page_id} missing valid title, skipping.")
             return False
 
         # Extract description
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
 
-        # Attempt to identify tables by header text; extract if present
+        # Initialize info dicts
         property_info = {}
         room_info = {}
-        tables = page.query_selector_all("table")
-        for tbl in tables:
-            headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
-            # Property info table
-            if "種別" in headers:
+
+        # Loop through all tables to pick out property and room data
+        for tbl in page.query_selector_all("table"):
+            header_cells = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+            # Property info
+            if "種別" in header_cells:
+                # Row 2: 種別, 所在地, 構造＋階数, 駐車場
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                struct = vals1[2].splitlines() if len(vals1) >= 3 else []
+                struct_parts = vals1[2].splitlines() if len(vals1) > 2 else [""]
                 property_info.update({
                     "property_type": vals1[0] if len(vals1) > 0 else "",
                     "location": vals1[1] if len(vals1) > 1 else "",
-                    "structure": struct[0] if struct else "",
-                    "floors": struct[1] if len(struct) > 1 else "",
+                    "structure": struct_parts[0],
+                    "floors": struct_parts[1] if len(struct_parts) > 1 else "",
                     "parking": vals1[3] if len(vals1) > 3 else ""
                 })
+                # Row 4: タイプ, エレベーター, 完成, 戸数
                 vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals2) >= 4:
                     property_info.update({
@@ -107,48 +110,50 @@ def scrape_page(page_id, playwright):
                         "completion_date": vals2[2],
                         "units": vals2[3].split()
                     })
+                # Equipment and transportation
                 eq_el = tbl.query_selector("tr:has-text('物件設備') td")
                 property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
                 trans_el = tbl.query_selector("tr:has-text('交通') td")
                 property_info["transportation"] = trans_el.inner_text().strip() if trans_el else ""
-            # Room info table
-            if "家賃" in headers:
-                r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                if len(r1) >= 4:
+
+            # Room info
+            if "家賃" in header_cells:
+                vals_r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                if len(vals_r1) >= 4:
                     room_info.update({
-                        "rent": r1[0],
-                        "area": r1[1],
-                        "deposit": r1[2],
-                        "key_money": r1[3]
+                        "rent": vals_r1[0],
+                        "area": vals_r1[1],
+                        "deposit": vals_r1[2],
+                        "key_money": vals_r1[3]
                     })
-                r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
-                if len(r2) >= 4:
+                vals_r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                if len(vals_r2) >= 4:
                     room_info.update({
-                        "water_fee": r2[0],
-                        "common_service_fee": r2[1],
-                        "year_built": r2[2],
-                        "balcony_direction": r2[3]
+                        "water_fee": vals_r2[0],
+                        "common_service_fee": vals_r2[1],
+                        "year_built": vals_r2[2],
+                        "balcony_direction": vals_r2[3]
                     })
                 re_el = tbl.query_selector("tr:has-text('部屋設備') td")
                 room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
 
         # Download & upload images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        folder = os.path.join(OUTPUT_DIR, str(page_id))
-        os.makedirs(folder, exist_ok=True)
+        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
+        os.makedirs(page_folder, exist_ok=True)
         images = []
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
             fname = src.split('/')[-1]
             if src.startswith("http") and fname and fname[0].isdigit():
-                path = os.path.join(folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
-                with open(path, 'wb') as f:
+                local_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
+                with open(local_path, 'wb') as f:
                     f.write(requests.get(src).content)
-                cloud_url = upload_image_to_cloudinary(path)
-                if cloud_url:
-                    images.append({"url": cloud_url})
+                uploaded = upload_image_to_cloudinary(local_path)
+                if uploaded:
+                    images.append({"url": uploaded})
 
-        # Build & upload payload
+        # Build Webflow fields
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
@@ -159,14 +164,19 @@ def scrape_page(page_id, playwright):
             "district": "6672b625a00e8f837e7b4e68",
             "category": "665b099bc0ffada56b489baf"
         }
+        # Merge whatever info was found
         fields.update(property_info)
         fields.update(room_info)
+
+        # Upload
         upload_to_webflow({"fields": fields})
+        logging.info(f"Page {page_id} processed successfully.")
         return True
 
     except Exception as e:
         logging.error(f"Error scraping page {page_id}: {e}")
         return False
+
     finally:
         browser.close()
 
@@ -177,13 +187,13 @@ if __name__ == "__main__":
             current = int(f.read().strip()) + 1
     except FileNotFoundError:
         current = START_PAGE
-    invalid = 0
+    invalid_count = 0
     with sync_playwright() as pw:
-        while invalid < MAX_CONSECUTIVE_INVALID:
+        while invalid_count < MAX_CONSECUTIVE_INVALID:
             if scrape_page(current, pw):
                 with open("last_page.txt", "w") as f:
                     f.write(str(current))
-                invalid = 0
+                invalid_count = 0
             else:
-                invalid += 1
+                invalid_count += 1
             current += 1
