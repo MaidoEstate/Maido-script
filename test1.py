@@ -67,7 +67,7 @@ def scrape_page(page_id, playwright):
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract title, skip generic site header
+        # Extract title
         title = None
         for h1 in page.query_selector_all("h1"):
             text = h1.inner_text().strip()
@@ -82,9 +82,9 @@ def scrape_page(page_id, playwright):
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
 
-        # Select tables based on headings
-        prop_table = page.query_selector("h2:has-text('物件情報') + table")
-        room_table = page.query_selector("h2:has-text('部屋情報') + table")
+        # Locate tables using XPath to ensure correct matching
+        prop_table = page.query_selector("xpath=//h2[contains(text(),'物件情報')]/following-sibling::table[1]")
+        room_table = page.query_selector("xpath=//h2[contains(text(),'部屋情報')]/following-sibling::table[1]")
         if not prop_table or not room_table:
             logging.warning(f"Page {page_id} missing expected tables. Skipping.")
             return False
@@ -167,7 +167,7 @@ def scrape_page(page_id, playwright):
         browser.close()
 
 # Main loop
-if __name__ == "__main__":
+def main():
     try:
         with open("last_page.txt") as f:
             current = int(f.read().strip()) + 1
@@ -183,3 +183,6 @@ if __name__ == "__main__":
             else:
                 invalid += 1
             current += 1
+
+if __name__ == "__main__":
+    main()
