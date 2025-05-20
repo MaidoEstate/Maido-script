@@ -14,6 +14,7 @@ WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
+DEFAULT_TITLE_KEYWORD = "大阪デザイナーズマンション専門サイト"
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
@@ -53,7 +54,7 @@ def upload_to_webflow(data):
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
-
+# Scrape a single page
 def scrape_page(page_id, playwright):
     url = f"{BASE_URL}{page_id}"
     logging.info(f"Scraping URL: {url}")
@@ -61,13 +62,21 @@ def scrape_page(page_id, playwright):
     page = browser.new_context().new_page()
     try:
         page.goto(url)
-        # Log homepage redirect but do not skip
+        # Skip pages that redirect to homepage
         if page.url.rstrip('/') == "https://www.designers-osaka-chintai.info":
-            logging.warning(f"Page {page_id} redirected to homepage, extracting what's available.")
+            logging.warning(f"Page {page_id} redirected to homepage, no data to extract.")
+            return False
 
-        # Extract title (take first H1 regardless)
-        title_el = page.query_selector("h1")
-        title = title_el.inner_text().strip() if title_el else f"Property {page_id}"
+        # Extract title
+        title = None
+        for h1 in page.query_selector_all("h1"):
+            text = h1.inner_text().strip()
+            if DEFAULT_TITLE_KEYWORD not in text:
+                title = text
+                break
+        if not title:
+            logging.warning(f"Page {page_id} missing valid title, skipping.")
+            return False
 
         # Extract description
         desc_el = page.query_selector(".description")
@@ -124,23 +133,23 @@ def scrape_page(page_id, playwright):
                 re = tbl.query_selector("tr:has-text('部屋設備') td")
                 room_info["room_equipment"] = re.inner_text().split() if re else []
 
-        # Download and upload images (including even if no tables)
+        # Download & upload images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        page_dir = os.path.join(OUTPUT_DIR, str(page_id))
-        os.makedirs(page_dir, exist_ok=True)
+        page_folder = os.path.join(OUTPUT_DIR, str(page_id))
+        os.makedirs(page_folder, exist_ok=True)
         images = []
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
-            name = src.split('/')[-1]
-            if src.startswith("http") and name and name[0].isdigit():
-                local = os.path.join(page_dir, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
-                with open(local, 'wb') as f:
+            fname = src.split('/')[-1]
+            if src.startswith("http") and fname and fname[0].isdigit():
+                local_path = os.path.join(page_folder, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
+                with open(local_path, 'wb') as f:
                     f.write(requests.get(src).content)
-                cloud_url = upload_image_to_cloudinary(local)
-                if cloud_url:
-                    images.append({"url": cloud_url})
+                uploaded = upload_image_to_cloudinary(local_path)
+                if uploaded:
+                    images.append({"url": uploaded})
 
-        # Merge all fields
+        # Build Webflow fields
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
