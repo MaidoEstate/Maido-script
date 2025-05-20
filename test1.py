@@ -82,9 +82,16 @@ def scrape_page(page_id, playwright):
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
 
-        # Locate tables using XPath to ensure correct matching
-        prop_table = page.query_selector("xpath=//h2[contains(text(),'物件情報')]/following-sibling::table[1]")
-        room_table = page.query_selector("xpath=//h2[contains(text(),'部屋情報')]/following-sibling::table[1]")
+        # Identify tables by header text
+        tables = page.query_selector_all("table")
+        prop_table = None
+        room_table = None
+        for tbl in tables:
+            headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+            if "種別" in headers:
+                prop_table = tbl
+            elif "家賃" in headers:
+                room_table = tbl
         if not prop_table or not room_table:
             logging.warning(f"Page {page_id} missing expected tables. Skipping.")
             return False
@@ -167,7 +174,7 @@ def scrape_page(page_id, playwright):
         browser.close()
 
 # Main loop
-def main():
+if __name__ == "__main__":
     try:
         with open("last_page.txt") as f:
             current = int(f.read().strip()) + 1
@@ -183,6 +190,3 @@ def main():
             else:
                 invalid += 1
             current += 1
-
-if __name__ == "__main__":
-    main()
