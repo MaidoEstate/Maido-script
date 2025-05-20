@@ -70,13 +70,15 @@ def scrape_page(page_id, playwright):
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract title (first H1)
+        # Extract title
         title_el = page.query_selector("h1")
         title = title_el.inner_text().strip() if title_el and title_el.inner_text().strip() else f"Property {page_id}"
+        logging.debug(f"Title extracted: {title}")
 
         # Extract description
         desc_el = page.query_selector(".description")
         description = desc_el.inner_text().strip() if desc_el else ""
+        logging.debug(f"Description extracted: {description}")
 
         # Prepare field containers
         property_info = {}
@@ -85,6 +87,8 @@ def scrape_page(page_id, playwright):
         # Parse all tables (物件情報 and 部屋情報)
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
+            logging.debug(f"Table headers: {headers}")
+
             # Property info table
             if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
@@ -96,6 +100,8 @@ def scrape_page(page_id, playwright):
                     "floors": struct[1] if len(struct) > 1 else "",
                     "parking": vals1[3] if len(vals1) > 3 else ""
                 }
+                logging.debug(f"Property vals1: {vals1}")
+                logging.debug(f"Parsed property_info: {property_info}")
                 vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals2) >= 4:
                     property_info.update({
@@ -104,16 +110,21 @@ def scrape_page(page_id, playwright):
                         "completion_date": vals2[2],
                         "units": vals2[3].split()
                     })
+                    logging.debug(f"Property vals2: {vals2}")
                 eq_el = tbl.query_selector("tr:has-text('物件設備') td")
                 property_info["property_equipment"] = eq_el.inner_text().split() if eq_el else []
                 tr_el = tbl.query_selector("tr:has-text('交通') td")
                 property_info["transportation"] = tr_el.inner_text().strip() if tr_el else ""
+                logging.debug(f"Final property_info: {property_info}")
+
             # Room info table
             if "家賃" in headers:
                 r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
+                logging.debug(f"Room vals_r1: {r1}")
                 if len(r1) >= 4:
                     room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
                 r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
+                logging.debug(f"Room vals_r2: {r2}")
                 if len(r2) >= 4:
                     room_info.update({
                         "water_fee": r2[0],
@@ -123,6 +134,7 @@ def scrape_page(page_id, playwright):
                     })
                 re_el = tbl.query_selector("tr:has-text('部屋設備') td")
                 room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
+                logging.debug(f"Parsed room_info: {room_info}")
 
         # Download and upload images: only filenames starting with a digit
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -132,7 +144,6 @@ def scrape_page(page_id, playwright):
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
             fname = src.split('/')[-1]
-            # only upload if filename starts with digit
             if not fname or not fname[0].isdigit():
                 continue
             local_path = os.path.join(page_dir, f"MAIDO_{datetime.now().strftime('%Y%m%d')}_{len(images)+1}.jpg")
@@ -141,6 +152,7 @@ def scrape_page(page_id, playwright):
             cloud_url = upload_image_to_cloudinary(local_path, page_id)
             if cloud_url:
                 images.append({"url": cloud_url})
+        logging.debug(f"Uploaded image URLs: {images}")
 
         # Build payload and upload
         fields = {
@@ -153,6 +165,7 @@ def scrape_page(page_id, playwright):
             "district": "6672b625a00e8f837e7b4e68",
             "category": "665b099bc0ffada56b489baf"
         }
+        logging.debug(f"Final merged fields for Webflow: {{**fields, **property_info, **room_info}}")
         fields.update(property_info)
         fields.update(room_info)
         upload_to_webflow({"fields": fields})
