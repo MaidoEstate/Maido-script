@@ -4,6 +4,7 @@ import requests
 import logging
 from datetime import datetime
 from playwright.sync_api import sync_playwright
+from googletrans import Translator  # pip install googletrans
 
 # Configuration
 START_PAGE = int(os.getenv("START_PAGE", 12453))
@@ -16,6 +17,16 @@ CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
 
+# Initialize translator
+translator = Translator()
+
+def translate(text):
+    try:
+        return translator.translate(text, dest='en').text
+    except Exception as e:
+        logging.warning(f"Translation failed for '{text}': {e}")
+        return text
+
 # Logging setup
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]: %(message)s")
 
@@ -25,7 +36,7 @@ for var in ("WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "CLOUDINARY_CLOUD_NAME
         logging.error(f"Environment variable {var} is not set.")
         exit(1)
 
-# Cloudinary image upload with retry logic, placing images in folder named by page_id
+# Cloudinary upload
 def upload_image_to_cloudinary(image_path, page_id):
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
     for attempt in range(3):
@@ -40,11 +51,11 @@ def upload_image_to_cloudinary(image_path, page_id):
             logging.warning(f"Retry {attempt+1}/3 for Cloudinary upload failed: {e}")
     return None
 
-# Upload data to Webflow
+# Webflow upload
 def upload_to_webflow(data):
     headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json; charset=utf-8"}
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [{ **data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25] }]}
+    payload = {"items": [{**data["fields"], "multi-image": data["fields"].get("multi-image", [])[:25]}]}
     payload_str = json.dumps(payload, ensure_ascii=False)
     try:
         logging.debug(f"Uploading payload: {payload_str}")
@@ -57,7 +68,7 @@ def upload_to_webflow(data):
     except Exception as e:
         logging.error(f"Error uploading to Webflow: {e}")
 
-# Scrape a single page
+# Scrape one page
 def scrape_page(page_id, playwright):
     url = f"{BASE_URL}{page_id}"
     logging.info(f"Scraping URL: {url}")
@@ -65,76 +76,72 @@ def scrape_page(page_id, playwright):
     page = browser.new_context().new_page()
     try:
         page.goto(url)
-        # Skip if redirected to homepage
         if page.url.rstrip('/') == HOMEPAGE_URL:
             logging.warning(f"Page {page_id} redirected to homepage. Skipping.")
             return False
 
-        # Extract title
-        title_el = page.query_selector("h1")
-        title = title_el.inner_text().strip() if title_el and title_el.inner_text().strip() else f"Property {page_id}"
-        logging.debug(f"Title: {title}")
+        # Title & description
+        raw_title = page.query_selector("h1").inner_text().strip() if page.query_selector("h1") else ""
+        title_jp = raw_title or f"Property {page_id}"
+        title = translate(title_jp)
+        logging.debug(f"Title JP: '{title_jp}' -> EN: '{title}'")
 
-        # Extract description
-        desc_el = page.query_selector(".description")
-        description = desc_el.inner_text().strip() if desc_el else ""
-        logging.debug(f"Description: {description}")
+        raw_desc = page.query_selector(".description").inner_text().strip() if page.query_selector(".description") else ""
+        description = translate(raw_desc)
+        logging.debug(f"Description JP: '{raw_desc}' -> EN: '{description}'")
 
-        # Parse tables
-        property_info = {}
-        room_info = {}
+        # Tables
+        property_info, room_info = {}, {}
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
-            logging.debug(f"Table headers: {headers}")
             if "種別" in headers:
                 vals1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 struct = vals1[2].splitlines() if len(vals1) > 2 else [""]
+                # Translate each
                 property_info = {
-                    "property_type": vals1[0] if len(vals1) > 0 else "",
-                    "location": vals1[1] if len(vals1) > 1 else "",
-                    "structure": struct[0],
-                    "floors": struct[1] if len(struct) > 1 else "",
-                    "parking": vals1[3] if len(vals1) > 3 else ""
+                    "property_type": translate(vals1[0]),
+                    "location": translate(vals1[1]),
+                    "structure": translate(struct[0]),
+                    "floors": translate(struct[1] if len(struct) > 1 else ""),
+                    "parking": translate(vals1[3] if len(vals1) > 3 else "")
                 }
-                logging.debug(f"Property vals1: {vals1}")
+                logging.debug(f"Property JP: {vals1} -> EN: {property_info}")
                 vals2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(vals2) >= 4:
                     property_info.update({
-                        "layout": vals2[0],
-                        "elevator": vals2[1],
-                        "completion_date": vals2[2],
-                        "units": vals2[3].split()
+                        "layout": translate(vals2[0]),
+                        "elevator": translate(vals2[1]),
+                        "completion_date": translate(vals2[2]),
+                        "units": [translate(u) for u in vals2[3].split()]
                     })
-                    logging.debug(f"Property vals2: {vals2}")
+                    logging.debug(f"Property vals2 JP: {vals2} -> EN update: {property_info}")
+                # Equipment & transport
                 eq = tbl.query_selector("tr:has-text('物件設備') td")
-                property_info["property_equipment"] = eq.inner_text().split() if eq else []
+                property_info["property_equipment"] = [translate(x) for x in eq.inner_text().split()] if eq else []
                 tr_el = tbl.query_selector("tr:has-text('交通') td")
-                property_info["transportation"] = tr_el.inner_text().strip() if tr_el else ""
-                logging.debug(f"Final property_info: {property_info}")
+                property_info["transportation"] = translate(tr_el.inner_text().strip()) if tr_el else ""
             if "家賃" in headers:
                 r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                logging.debug(f"Room vals_r1: {r1}")
                 if len(r1) >= 4:
-                    room_info = {"rent": r1[0], "area": r1[1], "deposit": r1[2], "key_money": r1[3]}
+                    room_info = {"rent": translate(r1[0]), "area": translate(r1[1]), "deposit": translate(r1[2]), "key_money": translate(r1[3])}
+                logging.debug(f"Room vals_r1 JP: {r1} -> EN: {room_info}")
                 r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
-                logging.debug(f"Room vals_r2: {r2}")
                 if len(r2) >= 4:
                     room_info.update({
-                        "water_fee": r2[0],
-                        "common_service_fee": r2[1],
-                        "year_built": r2[2],
-                        "balcony_direction": r2[3]
+                        "water_fee": translate(r2[0]),
+                        "common_service_fee": translate(r2[1]),
+                        "year_built": translate(r2[2]),
+                        "balcony_direction": translate(r2[3])
                     })
                 re_el = tbl.query_selector("tr:has-text('部屋設備') td")
-                room_info["room_equipment"] = re_el.inner_text().split() if re_el else []
-                logging.debug(f"Parsed room_info: {room_info}")
+                room_info["room_equipment"] = [translate(x) for x in re_el.inner_text().split()] if re_el else []
+                logging.debug(f"Room vals_r2 JP: {r2} -> EN: {room_info}")
 
-        # Extract Google Maps link
+        # Map link
         map_el = page.query_selector("a:has-text('大きな地図で見る')")
         map_link = map_el.get_attribute("href") if map_el else ""
-        logging.debug(f"Map link: {map_link}")
 
-        # Download and upload images
+        # Images
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         page_dir = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(page_dir, exist_ok=True)
@@ -150,21 +157,19 @@ def scrape_page(page_id, playwright):
             cloud_url = upload_image_to_cloudinary(local_path, page_id)
             if cloud_url:
                 images.append({"url": cloud_url})
-        logging.debug(f"Uploaded image URLs: {images}")
 
-        # Build payload and upload
+        # Build payload
         fields = {
             "name": title,
             "slug": f"property-{page_id}-{int(datetime.now().timestamp())}",
             "_archived": False,
             "_draft": False,
-            "description": f"<p>{description}</p>",
+            "description": description,
             "multi-image": images,
             "map_link": map_link,
             "district": "6672b625a00e8f837e7b4e68",
             "category": "665b099bc0ffada56b489baf"
         }
-        logging.debug(f"Merged fields before Webflow: {{**fields, **property_info, **room_info}}")
         fields.update(property_info)
         fields.update(room_info)
         upload_to_webflow({"fields": fields})
