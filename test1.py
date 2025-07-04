@@ -64,11 +64,15 @@ def upload_to_webflow(data):
         "Accept-Version": "1.0.0",
     }
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
+
+    # **Wrap** your fields inside the "fields" object:
     payload = {
         "items": [
             {
-                **data["fields"],
-                "multi-image": data["fields"].get("multi-image", [])[:25]
+                "fields": {
+                    **data["fields"],
+                    "multi-image": data["fields"].get("multi-image", [])[:25]
+                }
             }
         ]
     }
