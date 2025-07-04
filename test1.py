@@ -58,12 +58,24 @@ def upload_image_to_cloudinary(image_path, page_id):
 # Webflow upload helper
 def upload_to_webflow(data):
     logging.info("Uploading item to Webflow...")
-    headers = {"Authorization": f"Bearer {WEBFLOW_API_TOKEN}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept-Version": "1.0.0"
+    }
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
-    payload = {"items": [{**data['fields'], 'multi-image': data['fields'].get('multi-image', [])[:25]}]}
+    payload = {
+        "items": [
+            {
+                **data["fields"],
+                "multi-image": data["fields"].get("multi-image", [])[:25]
+            }
+        ]
+    }
     body = json.dumps(payload, ensure_ascii=False)
+    logging.info(f"POSTing to Webflow with payload: {body}")
     try:
-        resp = requests.post(url, headers=headers, data=body.encode('utf-8'))
+        resp = requests.post(url, headers=headers, data=body.encode("utf-8"))
         if resp.status_code in (200, 201):
             logging.info("Webflow upload succeeded.")
             return True
