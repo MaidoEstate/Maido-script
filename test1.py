@@ -57,11 +57,11 @@ def upload_image_to_cloudinary(image_path, page_id):
 
 # Webflow upload helper
 def upload_to_webflow(data):
-    logging.info("Uploading item to Webflow...")
+    logging.info("Uploading item to Webflow…")
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Content-Type": "application/json; charset=utf-8",
-        "Accept-Version": "1.0.0"
+        "Accept-Version": "1.0.0",
     }
     url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
     payload = {
@@ -73,18 +73,18 @@ def upload_to_webflow(data):
         ]
     }
     body = json.dumps(payload, ensure_ascii=False)
-    logging.info(f"POSTing to Webflow with payload: {body}")
+    logging.info("Webflow payload → %s", body)
+
     try:
         resp = requests.post(url, headers=headers, data=body.encode("utf-8"))
         if resp.status_code in (200, 201):
             logging.info("Webflow upload succeeded.")
             return True
-        logging.error(f"Webflow upload error {resp.status_code}: {resp.text}")
+        logging.error("Webflow upload error %s: %s", resp.status_code, resp.text)
         return False
     except Exception as e:
-        logging.error(f"Exception during Webflow upload: {e}")
+        logging.error("Exception during Webflow upload: %s", e)
         return False
-
 # Scrape function
 def scrape_page(page_id, playwright):
     url = f"{BASE_URL}{page_id}"
