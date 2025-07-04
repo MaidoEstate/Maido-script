@@ -64,7 +64,7 @@ def upload_to_webflow(data):
     Payload: { "fields": { … } }
     """
     logging.info("Uploading to Webflow v1…")
-    url = f"https://api.webflow.com/v1/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Content-Type":    "application/json",
