@@ -34,7 +34,7 @@ def translate(text: str) -> str:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
 
 # ── Env‐var check ────────────────────────────────────────────────────────────
-for v in ("WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "WEBFLOW_SITE_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_UPLOAD_PRESET"):
+for v in ("WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_UPLOAD_PRESET"):
     if not os.getenv(v):
         logging.error(f"Missing env-var: {v}")
         exit(1)
