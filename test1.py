@@ -8,20 +8,23 @@ from playwright.sync_api import sync_playwright
 from googletrans import Translator  # pip install googletrans
 
 # ── Config ────────────────────────────────────────────────────────────────────
-START_PAGE               = int(os.getenv("START_PAGE", 12453))
-BASE_URL                 = "https://www.designers-osaka-chintai.info/detail/id/"
-HOMEPAGE_URL             = "https://www.designers-osaka-chintai.info"
-OUTPUT_DIR               = os.getenv("OUTPUT_DIR", "./scraped_data")
-WEBFLOW_API_TOKEN        = os.getenv("WEBFLOW_API_TOKEN")
-WEBFLOW_COLLECTION_ID    = os.getenv("WEBFLOW_COLLECTION_ID")
-CLOUDINARY_CLOUD_NAME    = os.getenv("CLOUDINARY_CLOUD_NAME")
+START_PAGE = int(os.getenv("START_PAGE", 12453))
+BASE_URL = "https://www.designers-osaka-chintai.info/detail/id/"
+HOMEPAGE_URL = "https://www.designers-osaka-chintai.info"
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
+WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
+WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
+WEBFLOW_SITE_ID = os.getenv("WEBFLOW_SITE_ID")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
-MAX_CONSECUTIVE_INVALID  = 10
+MAX_CONSECUTIVE_INVALID = 10
 
 # ── Translator ───────────────────────────────────────────────────────────────
 t = Translator()
+
 def translate(text: str) -> str:
-    if not text: return ""
+    if not text:
+        return ""
     try:
         return t.translate(text, dest="en").text
     except Exception:
@@ -31,7 +34,7 @@ def translate(text: str) -> str:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
 
 # ── Env‐var check ────────────────────────────────────────────────────────────
-for v in ("WEBFLOW_API_TOKEN","WEBFLOW_COLLECTION_ID","CLOUDINARY_CLOUD_NAME","CLOUDINARY_UPLOAD_PRESET"):
+for v in ("WEBFLOW_API_TOKEN", "WEBFLOW_COLLECTION_ID", "WEBFLOW_SITE_ID", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_UPLOAD_PRESET"):
     if not os.getenv(v):
         logging.error(f"Missing env-var: {v}")
         exit(1)
@@ -40,13 +43,13 @@ for v in ("WEBFLOW_API_TOKEN","WEBFLOW_COLLECTION_ID","CLOUDINARY_CLOUD_NAME","C
 def upload_image_to_cloudinary(local_path, page_id):
     logging.info(f"Uploading image {os.path.basename(local_path)} → Cloudinary/{page_id}")
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
-    for attempt in range(1,4):
+    for attempt in range(1, 4):
         try:
-            with open(local_path,"rb") as f:
+            with open(local_path, "rb") as f:
                 resp = requests.post(
                     url,
-                    files={"file":f},
-                    data={"upload_preset":CLOUDINARY_UPLOAD_PRESET,"folder":str(page_id)},
+                    files={"file": f},
+                    data={"upload_preset": CLOUDINARY_UPLOAD_PRESET, "folder": str(page_id)},
                 )
             if resp.status_code == 200:
                 secure_url = resp.json().get("secure_url")
@@ -58,32 +61,67 @@ def upload_image_to_cloudinary(local_path, page_id):
     logging.error(f"✘ Cloudinary upload gave up: {local_path}")
     return None
 
-# ── Webflow upload (v2) ─────────────────────────────────────────────────────
+# ── Webflow Asset Upload ─────────────────────────────────────────────────────
+def upload_asset_to_webflow(image_url):
+    url = f"https://api.webflow.com/sites/{WEBFLOW_SITE_ID}/assets"
+    headers = {
+        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
+        "Accept-Version": "1.0.0",
+        "Content-Type": "application/json"
+    }
+    resp = requests.post(url, headers=headers, json={"url": image_url})
+    if resp.status_code in (200, 201):
+        asset_id = resp.json().get("_id")
+        logging.info(f"Uploaded asset to Webflow. ID: {asset_id}")
+        return asset_id
+    logging.error(f"Asset upload to Webflow failed: {resp.status_code} {resp.text}")
+    return None
+
+# ── Webflow upload (v2) ──────────────────────────────────────────────────────
 def upload_to_webflow(data):
-    """
-    Webflow CMS v2: single‐item create
-    POST /collections/{COLL_ID}/items
-    Body: { "fields": { … } }
-    """
-    logging.info("Uploading to Webflow v2…")
+    logging.info("Uploading to Webflow v2...")
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
-        "Authorization":  f"Bearer {WEBFLOW_API_TOKEN}",
+        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Accept-Version": "1.0.0",
-        "Content-Type":   "application/json; charset=utf-8",
+        "Content-Type": "application/json; charset=utf-8",
     }
 
-    # this must be exactly { "fields": { … } }
-    payload = { "fields": data["fields"] }
-    logging.info("→ Webflow v2 payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
+    image_urls = data["fields"].pop("multi-image")
+    asset_ids = []
+
+    for img in image_urls:
+        asset_id = upload_asset_to_webflow(img["url"])
+        if asset_id:
+            asset_ids.append(asset_id)
+        else:
+            logging.error(f"Failed to upload image to Webflow: {img['url']}")
+
+    if not asset_ids:
+        logging.error("No images uploaded successfully to Webflow, aborting item creation.")
+        return False
+
+    data["fields"]["multi-image"] = asset_ids
+    payload = {"fields": data["fields"]}
+
+    logging.info(f"Final payload to Webflow:\n{json.dumps(payload, indent=2)}")
 
     resp = requests.post(url, headers=headers, json=payload)
+
     if resp.status_code in (200, 201):
-        logging.info("✔ Webflow v2 success.")
+        logging.info("✔ Webflow item created successfully.")
         return True
 
-    logging.error("✘ Webflow v2 error %s: %s", resp.status_code, resp.text)
+    logging.error(f"✘ Webflow item creation failed {resp.status_code}: {resp.text}")
     return False
+
+# ── Main scraping function ───────────────────────────────────────────────────
+# [Rest of your scraping logic remains unchanged, just ensure you use the corrected functions above]
+
+# Your existing main scraping loop goes here unchanged, calling scrape_page...
+
+# Note: Ensure all environment variables are properly set before running.
+
 
 # ── Scrape a single page ────────────────────────────────────────────────────
 def scrape_page(page_id, pw):
