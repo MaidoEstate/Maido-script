@@ -60,23 +60,18 @@ def upload_image_to_cloudinary(local_path, page_id):
 
 # ── Webflow upload (v2) ─────────────────────────────────────────────────────
 def upload_to_webflow(data):
-    """
-    Uses v2 endpoint: POST /v2/collections/{COLL_ID}/items
-    Payload: { "items":[ { "fields": { … } } ] }
-    """
     logging.info("Uploading to Webflow v2…")
-    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization":  f"Bearer {WEBFLOW_API_TOKEN}",
-        "Content-Type":   "application/json; charset=utf-8",
         "Accept-Version": "1.0.0",
+        "Content-Type":   "application/json; charset=utf-8",
     }
-
-    payload = {"items":[{"fields": data["fields"]}]}
-    logging.info("⟳ Payload → %s", json.dumps(payload, ensure_ascii=False))
+    payload = {"fields": data["fields"]}
+    logging.info("Payload → %s", json.dumps(payload, ensure_ascii=False))
 
     resp = requests.post(url, headers=headers, json=payload)
-    if resp.status_code in (200,201):
+    if resp.status_code in (200, 201):
         logging.info("✔ Webflow v2 success.")
         return True
 
