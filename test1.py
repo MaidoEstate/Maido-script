@@ -3,7 +3,7 @@ import os, requests, json
 TOKEN = os.getenv("WEBFLOW_API_TOKEN")
 COLL  = os.getenv("WEBFLOW_COLLECTION_ID")
 
-url = f"https://api.webflow.com/collections/{COLL}/fields"
+url = f"https://api.webflow.com/v2/collections/{COLL}/fields"
 headers = {
     "Authorization":  f"Bearer {TOKEN}",
     "Accept-Version": "1.0.0",
