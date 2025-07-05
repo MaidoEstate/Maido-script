@@ -1,25 +1,24 @@
 import os, requests, json
 
-# 1) Load your secrets
+# 1) load your secrets
 TOKEN = os.getenv("WEBFLOW_API_TOKEN")
 COLL  = os.getenv("WEBFLOW_COLLECTION_ID")
 
-# 2) Build the “list fields” URL and headers
-url = f"https://api.webflow.com/collections/{COLL}/fields"
+# 2) hit the v1 fields endpoint
+url = f"https://api.webflow.com/v1/collections/{COLL}/fields"
 headers = {
     "Authorization":  f"Bearer {TOKEN}",
     "Accept-Version": "1.0.0",
 }
 
-# 3) Fire the request
 resp = requests.get(url, headers=headers)
 print("Status:", resp.status_code)
 print("Body:", resp.text)
 
-# 4) If it’s a 200, pretty-print the fields
+# 3) if it’s 200, pretty-print the slugs + whether they’re required
 if resp.status_code == 200:
-    data = resp.json().get("fields", [])
-    print("\nSlug".ljust(20), "Name".ljust(30), "Required")
+    fields = resp.json().get("fields", [])
+    print("\nslug".ljust(20), "name".ljust(30), "required")
     print("-"*60)
-    for f in data:
+    for f in fields:
         print(f"{f['slug']:<20} {f['name']:<30} {f['required']}")
