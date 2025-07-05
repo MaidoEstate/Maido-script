@@ -60,6 +60,11 @@ def upload_image_to_cloudinary(local_path, page_id):
 
 # ── Webflow upload (v2) ─────────────────────────────────────────────────────
 def upload_to_webflow(data):
+    """
+    Webflow CMS v2: single‐item create
+    POST /collections/{COLL_ID}/items
+    Body: { "fields": { … } }
+    """
     logging.info("Uploading to Webflow v2…")
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
@@ -67,8 +72,10 @@ def upload_to_webflow(data):
         "Accept-Version": "1.0.0",
         "Content-Type":   "application/json; charset=utf-8",
     }
-    payload = {"fields": data["fields"]}
-    logging.info("Payload → %s", json.dumps(payload, ensure_ascii=False))
+
+    # this must be exactly { "fields": { … } }
+    payload = { "fields": data["fields"] }
+    logging.info("→ Webflow v2 payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
 
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code in (200, 201):
