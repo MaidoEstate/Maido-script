@@ -14,7 +14,6 @@ HOMEPAGE_URL = "https://www.designers-osaka-chintai.info"
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./scraped_data")
 WEBFLOW_API_TOKEN = os.getenv("WEBFLOW_API_TOKEN")
 WEBFLOW_COLLECTION_ID = os.getenv("WEBFLOW_COLLECTION_ID")
-WEBFLOW_SITE_ID = "6654cf5aa715e9238d9e12f2"
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_UPLOAD_PRESET = os.getenv("CLOUDINARY_UPLOAD_PRESET")
 MAX_CONSECUTIVE_INVALID = 10
@@ -61,22 +60,6 @@ def upload_image_to_cloudinary(local_path, page_id):
     logging.error(f"✘ Cloudinary upload gave up: {local_path}")
     return None
 
-# ── Webflow Asset Upload ─────────────────────────────────────────────────────
-def upload_asset_to_webflow(image_url):
-    url = f"https://api.webflow.com/sites/{WEBFLOW_SITE_ID}/assets"
-    headers = {
-        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
-        "Accept-Version": "1.0.0",
-        "Content-Type": "application/json"
-    }
-    resp = requests.post(url, headers=headers, json={"url": image_url})
-    if resp.status_code in (200, 201):
-        asset_id = resp.json().get("_id")
-        logging.info(f"Uploaded asset to Webflow. ID: {asset_id}")
-        return asset_id
-    logging.error(f"Asset upload to Webflow failed: {resp.status_code} {resp.text}")
-    return None
-
 # ── Webflow upload (v2) ──────────────────────────────────────────────────────
 def upload_to_webflow(data):
     logging.info("Uploading to Webflow v2...")
@@ -88,18 +71,25 @@ def upload_to_webflow(data):
         "Content-Type": "application/json; charset=utf-8",
     }
 
-    # Get external image URLs and pass them directly to Webflow
-    image_objs = data["fields"].pop("multi-image", [])
-    image_urls = [img["url"] for img in image_objs if "url" in img]
+    # Get image URLs for multi-big-image-2 (correct slug!)
+    image_objs = data["fields"].get("multi-big-image-2", [])
+    image_urls = [img for img in image_objs if isinstance(img, str) or "url" in img]
 
+    # Normalize in case you have list of {"url": ...} or plain URLs
+    normalized_urls = []
+    for img in image_objs:
+        if isinstance(img, dict) and "url" in img:
+            normalized_urls.append(img["url"])
+        elif isinstance(img, str):
+            normalized_urls.append(img)
     # Limit to 25 images (Webflow max)
     max_imgs = 25
-    if len(image_urls) > max_imgs:
-        logging.warning(f"Truncating multi-image list from {len(image_urls)} to {max_imgs} (Webflow limit)")
-        image_urls = image_urls[:max_imgs]
+    if len(normalized_urls) > max_imgs:
+        logging.warning(f"Truncating multi-big-image-2 list from {len(normalized_urls)} to {max_imgs} (Webflow limit)")
+        normalized_urls = normalized_urls[:max_imgs]
 
-    if image_urls:
-        data["fields"]["multi-image"] = image_urls
+    if normalized_urls:
+        data["fields"]["multi-big-image-2"] = normalized_urls
 
     payload = {"fields": data["fields"]}
 
@@ -113,13 +103,6 @@ def upload_to_webflow(data):
 
     logging.error(f"✘ Webflow item creation failed {resp.status_code}: {resp.text}")
     return False
-# ── Main scraping function ───────────────────────────────────────────────────
-# [Rest of your scraping logic remains unchanged, just ensure you use the corrected functions above]
-
-# Your existing main scraping loop goes here unchanged, calling scrape_page...
-
-# Note: Ensure all environment variables are properly set before running.
-
 
 # ── Scrape a single page ────────────────────────────────────────────────────
 def scrape_page(page_id, pw):
@@ -182,18 +165,16 @@ def scrape_page(page_id, pw):
             if cu:
                 images.append({"url":cu})
 
-        # 5) Build final fields — include *only* the slugs your CMS expects:
+        # 5) Build final fields — use only API slugs from Webflow
         ts = int(time.time())
         fields = {
-            # required
-            "name":        title,
-            "slug":        f"property-{page_id}-{ts}",
-            "district":    "6672b625a00e8f837e7b4e68",
-            "category":    "665b099bc0ffada56b489baf",
-            # optional extras
+            "name":        title,  # required
+            "slug":        f"property-{page_id}-{ts}",  # required
+            "district":    "6672b625a00e8f837e7b4e68",  # update if you want to vary by page
+            "category":    "665b099bc0ffada56b489baf",  # update if you want to vary by page
             "description": f"<p>{desc}</p>",
-            "multi-image": images,
-            "map_link":    map_link,
+            "multi-big-image-2": [img["url"] for img in images],  # must be plain URLs, not dicts
+            "link-location": map_link,
         }
 
         # 6) Upload & return
