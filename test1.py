@@ -92,10 +92,13 @@ def upload_to_webflow(data):
     image_objs = data["fields"].pop("multi-image", [])
     image_urls = [img["url"] for img in image_objs if "url" in img]
 
-    if not image_urls:
-        logging.warning("No images to upload, proceeding without multi-image field.")
-        # Remove the multi-image field to avoid Webflow errors
-    else:
+    # Limit to 25 images (Webflow max)
+    max_imgs = 25
+    if len(image_urls) > max_imgs:
+        logging.warning(f"Truncating multi-image list from {len(image_urls)} to {max_imgs} (Webflow limit)")
+        image_urls = image_urls[:max_imgs]
+
+    if image_urls:
         data["fields"]["multi-image"] = image_urls
 
     payload = {"fields": data["fields"]}
