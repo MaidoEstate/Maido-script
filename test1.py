@@ -80,6 +80,7 @@ def upload_asset_to_webflow(image_url):
 # ── Webflow upload (v2) ──────────────────────────────────────────────────────
 def upload_to_webflow(data):
     logging.info("Uploading to Webflow v2...")
+
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
@@ -87,21 +88,16 @@ def upload_to_webflow(data):
         "Content-Type": "application/json; charset=utf-8",
     }
 
-    image_urls = data["fields"].pop("multi-image")
-    asset_ids = []
+    # Get external image URLs and pass them directly to Webflow
+    image_objs = data["fields"].pop("multi-image", [])
+    image_urls = [img["url"] for img in image_objs if "url" in img]
 
-    for img in image_urls:
-        asset_id = upload_asset_to_webflow(img["url"])
-        if asset_id:
-            asset_ids.append(asset_id)
-        else:
-            logging.error(f"Failed to upload image to Webflow: {img['url']}")
+    if not image_urls:
+        logging.warning("No images to upload, proceeding without multi-image field.")
+        # Remove the multi-image field to avoid Webflow errors
+    else:
+        data["fields"]["multi-image"] = image_urls
 
-    if not asset_ids:
-        logging.error("No images uploaded successfully to Webflow, aborting item creation.")
-        return False
-
-    data["fields"]["multi-image"] = asset_ids
     payload = {"fields": data["fields"]}
 
     logging.info(f"Final payload to Webflow:\n{json.dumps(payload, indent=2)}")
@@ -114,7 +110,6 @@ def upload_to_webflow(data):
 
     logging.error(f"✘ Webflow item creation failed {resp.status_code}: {resp.text}")
     return False
-
 # ── Main scraping function ───────────────────────────────────────────────────
 # [Rest of your scraping logic remains unchanged, just ensure you use the corrected functions above]
 
