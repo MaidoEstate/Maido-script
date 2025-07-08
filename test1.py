@@ -64,7 +64,7 @@ def upload_image_to_cloudinary(local_path, page_id):
 def upload_to_webflow(data):
     logging.info("Uploading to Webflow v2...")
 
-    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
         "Accept-Version": "1.0.0",
@@ -172,7 +172,7 @@ def scrape_page(page_id, pw):
             "slug":        f"property-{page_id}-{ts}",  # required
             "district":    "6672b625a00e8f837e7b4e68",  # update if you want to vary by page
             "category":    "665b099bc0ffada56b489baf",  # update if you want to vary by page
-           # "description": f"<p>{desc}</p>",
+            "description": f"<p>{desc}</p>",
             "multi-big-image-2": [img["url"] for img in images],  # must be plain URLs, not dicts
             "link-location": map_link,
         }
