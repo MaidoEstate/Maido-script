@@ -62,48 +62,32 @@ def upload_image_to_cloudinary(local_path, page_id):
 
 # ── Webflow upload (v2) ──────────────────────────────────────────────────────
 def upload_to_webflow(data):
-    logging.info("Uploading to Webflow v2...")
-
-    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
+    logging.info("Uploading to Webflow v2…")
+    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
-        "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
+        "Authorization":  f"Bearer {WEBFLOW_API_TOKEN}",
         "Accept-Version": "1.0.0",
-        "Content-Type": "application/json; charset=utf-8",
+        "Content-Type":   "application/json; charset=utf-8",
     }
 
-    # Get image URLs for multi-big-image-2 (correct slug!)
-    image_objs = data["fields"].get("multi-big-image-2", [])
-    image_urls = [img for img in image_objs if isinstance(img, str) or "url" in img]
+    # V2 **requires** an "items" array wrapping your fields
+    payload = {
+        "items": [
+            {
+                "fields": data["fields"]
+            }
+        ]
+    }
 
-    # Normalize in case you have list of {"url": ...} or plain URLs
-    normalized_urls = []
-    for img in image_objs:
-        if isinstance(img, dict) and "url" in img:
-            normalized_urls.append(img["url"])
-        elif isinstance(img, str):
-            normalized_urls.append(img)
-    # Limit to 25 images (Webflow max)
-    max_imgs = 25
-    if len(normalized_urls) > max_imgs:
-        logging.warning(f"Truncating multi-big-image-2 list from {len(normalized_urls)} to {max_imgs} (Webflow limit)")
-        normalized_urls = normalized_urls[:max_imgs]
-
-    if normalized_urls:
-        data["fields"]["multi-big-image-2"] = normalized_urls
-
-    payload = {"fields": data["fields"]}
-
-    logging.info(f"Final payload to Webflow:\n{json.dumps(payload, indent=2)}")
-
+    logging.info("→ Webflow v2 payload:\n%s", json.dumps(payload, ensure_ascii=False, indent=2))
     resp = requests.post(url, headers=headers, json=payload)
 
     if resp.status_code in (200, 201):
         logging.info("✔ Webflow item created successfully.")
         return True
 
-    logging.error(f"✘ Webflow item creation failed {resp.status_code}: {resp.text}")
+    logging.error("✘ Webflow v2 error %s: %s", resp.status_code, resp.text)
     return False
-
 # ── Scrape a single page ────────────────────────────────────────────────────
 def scrape_page(page_id, pw):
     url = f"{BASE_URL}{page_id}"
