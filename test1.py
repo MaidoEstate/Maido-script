@@ -78,7 +78,7 @@ def upload_to_webflow(fields: dict) -> bool:
         "Accept-Version": "1.0.0",
         "Content-Type":   "application/json",
     }
-    payload = {"items":[{"fields": fields}]}
+    payload = {"items": [fields]}  # <--- FIX HERE!
     logging.info("Webflow payload:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
     r = requests.post(url, headers=headers, json=payload)
     if r.status_code in (200,201): return True
