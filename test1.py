@@ -53,6 +53,7 @@ DEFAULT_DISTRICT_ID = DISTRICT_MAP["Chuo-ku"]
 
 # ── Translator ───────────────────────────────────────────────────────────────
 translator = Translator()
+
 def translate(text: str) -> str:
     if not text:
         return ""
@@ -72,15 +73,14 @@ for v in ("WEBFLOW_API_TOKEN","WEBFLOW_COLLECTION_ID","CLOUDINARY_CLOUD_NAME","C
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def upload_image_to_cloudinary(path, page_id):
-    """Upload local file to Cloudinary under folder=page_id."""
     url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
     for attempt in range(1,4):
         try:
-            with open(path,"rb") as fd:
+            with open(path, "rb") as fd:
                 resp = requests.post(
                     url,
                     files={"file": fd},
-                    data={"upload_preset": CLOUDINARY_UPLOAD_PRESET,"folder":str(page_id)}
+                    data={"upload_preset": CLOUDINARY_UPLOAD_PRESET, "folder": str(page_id)}
                 )
             if resp.status_code == 200:
                 return resp.json()["secure_url"]
@@ -89,8 +89,8 @@ def upload_image_to_cloudinary(path, page_id):
     logging.error("Cloudinary failed for %s", path)
     return None
 
+
 def upload_to_webflow(fields: dict) -> bool:
-    """POST to Webflow v2 /items endpoint."""
     url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization":  f"Bearer {WEBFLOW_API_TOKEN}",
@@ -105,36 +105,23 @@ def upload_to_webflow(fields: dict) -> bool:
     logging.error("Webflow error %s: %s", r.status_code, r.text)
     return False
 
+
 def infer_district(location: str) -> str:
-    """Find a ward name in location; return its CMS ID or default."""
     low = location.lower()
     for ward, did in DISTRICT_MAP.items():
         if ward.lower() in low:
             return did
     return DEFAULT_DISTRICT_ID
 
+
 def parse_transport(transport_raw: str):
-    """
-    Expect something like:
-       Line/StationName X minute walk
-       NextLine…
-    We'll split on newline, then slash, then last two tokens.
-    """
     first_line = transport_raw.split("\n")[0]
     parts = first_line.split("/")
-    if len(parts)>=2:
-        after_slash = parts[1].strip()
-    else:
-        after_slash = first_line
-    # try to split off "X minute(s) walk"
+    after_slash = parts[1].strip() if len(parts)>=2 else first_line
     toks = after_slash.rsplit(" ", 2)
     if len(toks)==3:
-        station = toks[0]
-        walk    = " ".join(toks[1:])
-    else:
-        station = after_slash
-        walk    = ""
-    return station, walk
+        return toks[0], " ".join(toks[1:])
+    return after_slash, ""
 
 # ── Scraping ────────────────────────────────────────────────────────────────
 def scrape_page(page_id, pw) -> bool:
@@ -148,40 +135,37 @@ def scrape_page(page_id, pw) -> bool:
             logging.info("Redirected → homepage; skipping.")
             return False
 
-        # — 1) Basic text
         raw_title = page.query_selector("h1").inner_text().strip() if page.query_selector("h1") else ""
         title     = translate(raw_title) or f"Property {page_id}"
         raw_desc  = page.query_selector(".description").inner_text().strip() if page.query_selector(".description") else ""
         desc      = translate(raw_desc)
 
-        # — 2) Tables
         prop_info = {}
         room_info = {}
         for tbl in page.query_selector_all("table"):
             headers = [th.inner_text().strip() for th in tbl.query_selector_all("tr:nth-of-type(1) th")]
-            # Property
             if "種別" in headers:
                 vals = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
-                prop_info["location"]     = translate(vals[1]) if len(vals)>1 else ""
-                transport_raw = tbl.query_selector("tr:has-text('交通') td").inner_text().strip() if tbl.query_selector("tr:has-text('交通') td')") else ""
+                prop_info["location"] = translate(vals[1]) if len(vals)>1 else ""
+                trn_td = tbl.query_selector("tr:has-text('交通') td")
+                transport_raw = trn_td.inner_text().strip() if trn_td else ""
                 prop_info["nearest_station"], prop_info["walk_to_station"] = parse_transport(translate(transport_raw))
-            # Room
             if "家賃" in headers:
                 r1 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(2) td")]
                 if len(r1)>=4:
-                    room_info["price"]          = translate(r1[0])
-                    room_info["sqf"]            = translate(r1[1])
-                    room_info["deposit"]        = translate(r1[2])
-                    room_info["key_money"]      = translate(r1[3])
+                    room_info.update({
+                        "price":     translate(r1[0]),
+                        "sqf":       translate(r1[1]),
+                        "deposit":   translate(r1[2]),
+                        "key_money": translate(r1[3])
+                    })
                 r2 = [td.inner_text().strip() for td in tbl.query_selector_all("tr:nth-of-type(4) td")]
                 if len(r2)>=2:
                     room_info["management_fee"] = translate(r2[1])
 
-        # — 3) Map link
         map_el   = page.query_selector("a:has-text('大きな地図で見る')")
         map_link = map_el.get_attribute("href") if map_el else ""
 
-        # — 4) Images (optional)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         img_dir = os.path.join(OUTPUT_DIR, str(page_id))
         os.makedirs(img_dir, exist_ok=True)
@@ -189,40 +173,37 @@ def scrape_page(page_id, pw) -> bool:
         for img in page.query_selector_all("img"):
             src = img.get_attribute("src") or ""
             fname = src.split("/")[-1]
-            if not fname or not fname[0].isdigit(): 
+            if not fname or not fname[0].isdigit():
                 continue
             local_path = os.path.join(img_dir, f"MAIDO_{datetime.now():%Y%m%d}_{len(image_urls)+1}.jpg")
-            with open(local_path,"wb") as f:
+            with open(local_path, "wb") as f:
                 f.write(requests.get(src).content)
             cu = upload_image_to_cloudinary(local_path, page_id)
             if cu:
                 image_urls.append(cu)
 
-        # — 5) Build fields
         ts = int(time.time())
         fields = {
-            "name":             title,
-            "slug":             f"property-{page_id}-{ts}",
-            "location":         prop_info.get("location", ""),
-            "link_location":    map_link,
-            "district":         infer_district(prop_info.get("location","")),
-            "property_title":   title,
-            "nearest_station":  prop_info.get("nearest_station",""),
-            "walk_to_station":  prop_info.get("walk_to_station",""),
-            "sqf":              room_info.get("sqf",""),
-            "type":             "",  # if you want to pull from layout, fill here
-            "key_money":        room_info.get("key_money",""),
-            "price":            room_info.get("price",""),
-            "management_fee":   room_info.get("management_fee",""),
+            "name":            title,
+            "slug":            f"property-{page_id}-{ts}",
+            "location":        prop_info.get("location",""),
+            "link_location":   map_link,
+            "district":        infer_district(prop_info.get("location","")),
+            "property_title":  title,
+            "nearest_station": prop_info.get("nearest_station",""),
+            "walk_to_station": prop_info.get("walk_to_station",""),
+            "sqf":             room_info.get("sqf",""),
+            "type":            "",
+            "key_money":       room_info.get("key_money",""),
+            "price":           room_info.get("price",""),
+            "management_fee":  room_info.get("management_fee",""),
             "short_description": desc.split(".")[0] + "." if "." in desc else desc,
-            "description":      desc,
-            "category":         CATEGORY_ID,
-            "agent":            AGENT_NAME,
-            # optional images field:
-            "multi-image":      image_urls[:25],
+            "description":     desc,
+            "category":        CATEGORY_ID,
+            "agent":           AGENT_NAME,
+            "multi-image":     image_urls[:25],
         }
 
-        # — 6) Upload
         success = upload_to_webflow(fields)
         if not success:
             logging.error("Failed to upload page %s", page_id)
@@ -249,6 +230,4 @@ if __name__ == "__main__":
                 bad = 0
             else:
                 bad += 1
-            with open("last_page.txt","w") as f:
-                f.write(str(current))
-            current += 1
+            with open("last
