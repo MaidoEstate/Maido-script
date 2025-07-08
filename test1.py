@@ -172,8 +172,8 @@ def scrape_page(page_id, pw):
             "slug":        f"property-{page_id}-{ts}",  # required
             "district":    "6672b625a00e8f837e7b4e68",  # update if you want to vary by page
             "category":    "665b099bc0ffada56b489baf",  # update if you want to vary by page
-            "description": f"<p>{desc}</p>",
-           # "multi-big-image-2": [img["url"] for img in images],  # must be plain URLs, not dicts
+           # "description": f"<p>{desc}</p>",
+            "multi-big-image-2": [img["url"] for img in images],  # must be plain URLs, not dicts
             "link-location": map_link,
         }
 
