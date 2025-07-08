@@ -72,7 +72,7 @@ def upload_image_to_cloudinary(path, page_id):
     return None
 
 def upload_to_webflow(fields: dict) -> bool:
-    url = f"https://api.webflow.com/collections/{WEBFLOW_COLLECTION_ID}/items"
+    url = f"https://api.webflow.com/v2/collections/{WEBFLOW_COLLECTION_ID}/items"
     headers = {
         "Authorization":  f"Bearer {WEBFLOW_API_TOKEN}",
         "Accept-Version": "1.0.0",
